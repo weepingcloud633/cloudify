@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 /// GitHub `owner/repo` that publishes the releases. Change this to the repository you publish to.
-pub const REPO: &str = "weepingcloud/cloudify";
+pub const REPO: &str = "weepingcloud633/cloudify";
 
 static FOUND: Mutex<Option<Found>> = Mutex::new(None);
 
