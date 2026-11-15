@@ -953,6 +953,7 @@ ApplicationWindow {
     Timer { id: p2b; interval: 600; onTriggered: { if (imm.item) imm.item.swapPanel("sound"); win.setEq(win.eqPresets[19].g); p3.start() } }
     Timer { id: p3; interval: 1300; onTriggered: { console.log("AUTOTEST eq name=" + win.eqName + " gains=" + win.eqGains.join(",")); win.shot("immersive_sound"); p3b.start() } }
     Timer { id: p3b; interval: 600; onTriggered: { win.setEq([0, 0, 0, 0, 0, 0]); if (imm.item) imm.item.swapPanel(""); t5.start() } }
+    Timer { id: updTest; running: win.autotest; interval: 3000; onTriggered: win.checkUpdate(true) }
     Timer { id: t5; interval: 800; onTriggered: { win.download([win.cur]); win.pinSetup(); t6.start() } }
     function pinSetup() {
         var cr = JSON.parse(backend.savePlaylist("", "Road Trip", "Songs for long drives with the windows down", "design:2")); reload()
