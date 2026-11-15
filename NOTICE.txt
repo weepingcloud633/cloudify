@@ -1,0 +1,22 @@
+﻿Cloudify, by weepingcloud.
+Licensed GPL-3.0-or-later (see LICENSE).
+
+Credits
+- Silva Music: the app this was rewritten from (playback design, playlist import/export formats).
+- Swiftify (github.com/swiftify-org/swiftify, GPL-3.0, (C) shred0s): visual design reference.
+- yt-dlp (Unlicense): downloaded on first run, not bundled.
+- Qt 6 (LGPL-3.0): UI and media playback, linked dynamically.
+
+Design and shaders
+- The wavy seek bar, scalloped play button, squiggle ring, rounded cover and liquid backdrop
+  shaders (shaders/*.frag) are taken from Swiftify, (C) 2026 shred0s, GPL-3.0-or-later.
+  The compiled .qsb files are built from those sources unchanged.
+- Icons: Segoe Fluent Icons (ships with Windows 11).
+
+Fonts
+- Google Sans Flex (SIL Open Font License 1.1, see fonts\GoogleSansFlex-OFL.txt): UI text. Static weights
+  are instanced from the variable font, unchanged otherwise.
+- Material Icons Round (Apache License 2.0, see fonts\MaterialIcons-LICENSE.txt): icons.
+
+Audio
+- Decoding with symphonia (MPL-2.0), output through rodio and cpal (MIT/Apache-2.0).

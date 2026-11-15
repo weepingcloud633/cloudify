@@ -1,0 +1,39 @@
+[package]
+name = "cloud-music"
+version = "0.16.1"
+edition = "2021"
+authors = ["weepingcloud"]
+description = "Cloudify, a fast and light YouTube Music player by weepingcloud"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+cxx = "1"
+cxx-qt = "0.10"
+cxx-qt-lib = { version = "0.10", features = ["qt_full"] }
+serde_json = "1"
+ureq = { version = "2", features = ["json"] }
+tiny_http = "0.12"
+sha2 = "0.10"
+base64 = "0.22"
+flate2 = "1"
+rodio = { version = "0.20", default-features = false }
+symphonia = { version = "0.5", default-features = false, features = ["aac", "isomp4", "mp3", "flac", "ogg", "vorbis", "wav", "pcm", "alac"] }
+rustfft = "6"
+lofty = "0.22"
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging", "Win32_System_ProcessStatus", "Win32_System_Threading", "Win32_Graphics_Dwm", "Win32_UI_Controls", "Win32_System_Time", "Win32_System_LibraryLoader"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+
+wry = "0.53"
+tao = "0.34"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[build-dependencies]
+embed-resource = "2"
+cxx-qt-build = { version = "0.10", features = ["link_qt_object_files"] }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true

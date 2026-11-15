@@ -1,0 +1,10 @@
+/target/
+/stage/
+/dist/
+/shots/
+*.txt
+!NOTICE.txt
+!shaders/LICENSE-swiftify-shaders.txt
+.qmlls.ini
+*.tmp
+*.log
