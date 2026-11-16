@@ -75,7 +75,6 @@ This builds the installer, writes its SHA-256, and creates the release. Installe
 ## Credits
 
 - Interface design and shaders from Swiftify by shred0s (GPL-3.0).
-- Rewritten from Silva Music.
 - Songs come from YouTube Music through [yt-dlp](https://github.com/yt-dlp/yt-dlp). Lyrics come from [lrclib.net](https://lrclib.net).
 - Fonts: Google Sans Flex and Material Icons.
 
