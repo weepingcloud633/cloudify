@@ -1,6 +1,6 @@
 [package]
 name = "cloud-music"
-version = "0.17.0"
+version = "0.18.0"
 edition = "2021"
 authors = ["weepingcloud"]
 description = "Cloudify, a fast and light YouTube Music player by weepingcloud"
@@ -20,7 +20,7 @@ rodio = { version = "0.20", default-features = false }
 symphonia = { version = "0.5", default-features = false, features = ["aac", "isomp4", "mp3", "flac", "ogg", "vorbis", "wav", "pcm", "alac"] }
 rustfft = "6"
 lofty = "0.22"
-windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging", "Win32_System_ProcessStatus", "Win32_System_Threading", "Win32_Graphics_Dwm", "Win32_UI_Controls", "Win32_System_Time", "Win32_System_LibraryLoader", "Win32_System_Registry", "Win32_UI_Shell", "Win32_Graphics_Gdi"] }
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging", "Win32_System_ProcessStatus", "Win32_System_Threading", "Win32_Graphics_Dwm", "Win32_UI_Controls", "Win32_System_Time", "Win32_System_LibraryLoader", "Win32_System_Registry", "Win32_UI_Shell", "Win32_Graphics_Gdi", "Win32_Security"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 
 wry = "0.53"

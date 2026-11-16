@@ -26,7 +26,7 @@ Item {
         property real phase: 0
         property real cornerRadius: Math.min(width, height) / 2
         Behavior on amplitude { NumberAnimation { duration: Theme.quick; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } }
-        Timer { running: r.hovered && r.visible && Theme.motion && Theme.windowActive; interval: 42; repeat: true; onTriggered: parent.phase += 0.15 }
+        Timer { running: r.hovered && r.visible && Theme.motion; interval: 33; repeat: true; onTriggered: parent.phase += 0.12 }
         fragmentShader: "qrc:/shaders/wavy_pill.frag.qsb"
     }
     Text {

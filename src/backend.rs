@@ -80,6 +80,14 @@ pub mod qobject {
         #[qinvokable]
         fn languages(self: &Backend) -> QString;
         #[qinvokable]
+        #[cxx_name = "openArtistNamed"]
+        fn open_artist_named(self: Pin<&mut Backend>, name: &QString);
+        #[qinvokable]
+        fn similar(self: Pin<&mut Backend>, vid: &QString);
+        #[qsignal]
+        #[cxx_name = "similarReady"]
+        fn similar_ready(self: Pin<&mut Backend>, vid: QString, json: QString);
+        #[qinvokable]
         #[cxx_name = "setFullscreen"]
         fn set_fullscreen(self: &Backend, on: bool) -> bool;
         #[qinvokable]
@@ -876,6 +884,30 @@ impl qobject::Backend {
     /// The interface translations (langs/tables.json), compiled in.
     pub fn languages(&self) -> QString {
         q(include_str!("../langs/tables.json"))
+    }
+
+    /// Open an artist from just a name (the song menu's "Go to artist").
+    pub fn open_artist_named(self: Pin<&mut Self>, name: &QString) {
+        let name = name.to_string();
+        let qt = self.qt_thread();
+        std::thread::spawn(move || {
+            let out = match crate::ytm_more::find_artist(&name).ok_or_else(|| "Could not find that artist".to_string()).and_then(|(id, n, t)| crate::ytm_more::artist_page(&id, &n, &t)) {
+                Ok(v) => json!({"ok": true, "artist": v}),
+                Err(e) => json!({"ok": false, "error": e}),
+            };
+            let _ = qt.queue(move |mut b| b.as_mut().artist_ready(q(&out.to_string())));
+        });
+    }
+
+    /// Songs like this one (Home's "Because you listened to").
+    pub fn similar(self: Pin<&mut Self>, vid: &QString) {
+        let vid = vid.to_string();
+        let qt = self.qt_thread();
+        std::thread::spawn(move || {
+            let items = ytm::radio(&vid).unwrap_or(Value::Array(vec![]));
+            let out = json!({"ok": true, "items": items});
+            let _ = qt.queue(move |mut b| b.as_mut().similar_ready(q(&vid), q(&out.to_string())));
+        });
     }
 
     /// Real fullscreen: no frame, no rounded corners, over the whole monitor and above the taskbar.

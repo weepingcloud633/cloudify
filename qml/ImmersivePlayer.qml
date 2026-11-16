@@ -114,7 +114,7 @@ Item {
         property real wavelength: 70
         property real phase: spin
         property real cornerRadius: width * 0.45
-        Timer { running: r.visible && Theme.motion && Theme.windowActive; interval: 66; repeat: true; onTriggered: parent.spin += 0.0065 }
+        Timer { running: r.visible && Theme.motion && Theme.windowActive; interval: 40; repeat: true; onTriggered: parent.spin += 0.004 }
         fragmentShader: "qrc:/shaders/wavy_pill.frag.qsb"
     }
     Blob { x: -120; y: -100; width: 460; height: 460; spin: 0.5 }

@@ -100,13 +100,6 @@ fn send(f: &mut File, p: &Presence) -> std::io::Result<()> {
     f.write_all(&frame(1, &json!({"cmd": "SET_ACTIVITY", "args": {"pid": std::process::id(), "activity": activity}, "nonce": nonce})))
 }
 
-static STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
 pub fn update(p: Presence) {
-    // nothing to do (and no thread to start) while Rich Presence is off
-    if p.app_id.is_empty() && !STARTED.load(std::sync::atomic::Ordering::Relaxed) {
-        return;
-    }
-    STARTED.store(true, std::sync::atomic::Ordering::Relaxed);
     let _ = tx().lock().unwrap().send(p);
 }

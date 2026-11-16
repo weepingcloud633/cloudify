@@ -9,8 +9,8 @@ Item {
     property real time: 37
     Timer {
         running: r.visible && Theme.windowActive && Theme.motion
-        interval: 40; repeat: true
-        onTriggered: r.time += 0.040
+        interval: 33; repeat: true
+        onTriggered: r.time += 0.033
     }
     function shade(i) {
         var s = Theme.swatches

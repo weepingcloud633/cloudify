@@ -24,7 +24,25 @@ Item {
     property bool showHidden: false
     readonly property var hiddenIds: isPlaylist && livePl ? (livePl.hidden || []) : []
     onLivePlChanged: if (!livePl) showHidden = false
-    readonly property var tracks: isArtist ? app.artist.songs : isLiked ? app.lib.liked : isSongs ? app.allSongs : isLocal ? app.localTracks : (isPlaylist ? (livePl ? (showHidden || hiddenIds.length === 0 ? livePl.tracks : livePl.tracks.filter(function(x) { return hiddenIds.indexOf(x.id) < 0 })) : []) : (app.shownPlaylist ? app.shownPlaylist.tracks : []))
+    property string filterText: ""
+    property string sortKey: "custom"         // custom | title | artist | duration
+    function listTools(list) {
+        var l = list
+        var f = filterText.trim().toLowerCase()
+        if (f !== "") l = l.filter(function(x) { return ((x.title || "") + " " + (x.artist || "") + " " + (x.album || "")).toLowerCase().indexOf(f) >= 0 })
+        if (sortKey !== "custom") {
+            l = l.slice()
+            l.sort(function(a, b) {
+                if (sortKey === "duration") return (a.dur || 0) - (b.dur || 0)
+                var x = (sortKey === "artist" ? a.artist : a.title) || "", y = (sortKey === "artist" ? b.artist : b.title) || ""
+                return x.localeCompare(y)
+            })
+        }
+        return l
+    }
+    onPageChanged: { filterText = ""; sortKey = "custom" }
+    readonly property var baseTracks: isArtist ? app.artist.songs : isLiked ? app.lib.liked : isSongs ? app.allSongs : isLocal ? app.localTracks : (isPlaylist ? (livePl ? (showHidden || hiddenIds.length === 0 ? livePl.tracks : livePl.tracks.filter(function(x) { return hiddenIds.indexOf(x.id) < 0 })) : []) : (app.shownPlaylist ? app.shownPlaylist.tracks : []))
+    readonly property var tracks: isArtist ? baseTracks : listTools(baseTracks)
     readonly property bool pinned: livePl !== null && livePl.pinned === true
     readonly property real totalSecs: { var t = 0; for (var i = 0; i < tracks.length; i++) t += tracks[i].dur || 0; return t }
     function durText(s) { var m = Math.round(s / 60); return m >= 60 ? Math.floor(m / 60) + " " + Tr.t("hr") + " " + (m % 60) + " " + Tr.t("min") : m + " " + Tr.t("min") }
@@ -230,6 +248,23 @@ Item {
                 Flow {
                     width: parent.width; spacing: 8
                     PillButton { text: Tr.t("Play"); icon: "play_arrow"; variant: "filled"; enabled: r.tracks.length > 0; onClicked: r.app.playList(r.tracks, 0) }
+                    // find in the list, and sort it (as Spotify does)
+                    TextField {
+                        id: ff
+                        visible: !r.isArtist && r.baseTracks.length > 6
+                        width: 190; height: 40
+                        placeholderText: Tr.t("Filter"); color: Theme.fg; placeholderTextColor: Theme.fgVariant
+                        font.family: Theme.bodyFont; font.pixelSize: 14; leftPadding: 16
+                        text: r.filterText
+                        background: Rectangle { radius: 20; color: Theme.container; border.width: ff.activeFocus ? 2 : 0; border.color: Theme.primary }
+                        onTextEdited: r.filterText = text
+                    }
+                    PillButton {
+                        visible: !r.isArtist && r.baseTracks.length > 6
+                        text: r.sortKey === "custom" ? Tr.t("Custom order") : (r.sortKey === "title" ? Tr.t("Title") : (r.sortKey === "artist" ? Tr.t("Artist") : Tr.t("Duration")))
+                        icon: "sort"
+                        onClicked: r.sortKey = r.sortKey === "custom" ? "title" : (r.sortKey === "title" ? "artist" : (r.sortKey === "artist" ? "duration" : "custom"))
+                    }
                     PillButton { text: Tr.t("Shuffle"); icon: "shuffle"; enabled: r.tracks.length > 0; onClicked: { var i = Math.floor(Math.random() * r.tracks.length); r.app.shuffle = true; r.app.playList(r.tracks, i) } }
                     PillButton { visible: r.isLocal; text: Tr.t("Add folder"); icon: "create_new_folder"; onClicked: r.app.pickFolder() }
                     PillButton { visible: r.isLocal; text: r.app.scanning ? Tr.t("Scanning…") : Tr.t("Rescan"); icon: "refresh"; onClicked: r.app.scanLocal() }

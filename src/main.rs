@@ -33,6 +33,7 @@ mod ytm_more;
 use cxx_qt_lib::{QGuiApplication, QQmlApplicationEngine, QUrl};
 
 fn selftest() {
+    let t0 = std::time::Instant::now();
     let r = ytm::search_songs("daft punk get lucky").expect("search");
     let a = r.as_array().unwrap();
     println!("results: {}", a.len());
@@ -41,7 +42,6 @@ fn selftest() {
     }
     let id = a[0]["id"].as_str().unwrap().to_string();
     let port = stream::serve();
-    let t0 = std::time::Instant::now();
     stream::prepare(&id).expect("prepare");
     println!("prepared in {:?}", t0.elapsed());
     let resp = ureq::get(&format!("http://127.0.0.1:{port}/s/{id}"))
@@ -68,9 +68,33 @@ fn set_qt_env(name: &str, value: &str) {
     }
 }
 
+/// True when this is the only Cloudify. A second one asks the first to show its window and quits.
+fn first_instance() -> bool {
+    // test runs (their own data folder, or the test flags) never collide with the real app
+    let testing = std::env::var_os("CLOUDIFY_DATA").is_some() || std::env::args().any(|a| a == "--autotest" || a == "--play" || a == "--fstest");
+    if testing {
+        return true;
+    }
+    use windows_sys::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS};
+    use windows_sys::Win32::System::Threading::CreateMutexW;
+    let name: Vec<u16> = "Local\\Cloudify.SingleInstance".encode_utf16().chain(std::iter::once(0)).collect();
+    unsafe {
+        // the handle stays open for as long as the app runs
+        let h = CreateMutexW(std::ptr::null(), 0, name.as_ptr());
+        if !h.is_null() && GetLastError() == ERROR_ALREADY_EXISTS {
+            tray::ask_to_show();
+            return false;
+        }
+    }
+    true
+}
+
 fn main() {
     if std::env::args().any(|a| a == "--selftest") {
         selftest();
+        return;
+    }
+    if !first_instance() {
         return;
     }
     // Qt reads its settings through the C runtime's environment, which std::env::set_var does
@@ -86,15 +110,15 @@ fn main() {
         Some("opengl") => set_qt_env("QSG_RHI_BACKEND", "opengl"),
         _ => {}
     }
-    let t0 = std::time::Instant::now();
     let mut app = QGuiApplication::new();
-    paths::log(&format!("startup: Qt application {} ms", t0.elapsed().as_millis()));
     let mut engine = QQmlApplicationEngine::new();
     if let Some(engine) = engine.as_mut() {
         engine.load(&QUrl::from("qrc:/qt/qml/CloudMusic/qml/Main.qml"));
-        paths::log(&format!("startup: QML loaded {} ms", t0.elapsed().as_millis()));
     }
     if let Some(app) = app.as_mut() {
         app.exec();
     }
+    // leave at once: nothing is left to save, and no thread may keep a hidden copy alive
+    tray::remove();
+    std::process::exit(0);
 }

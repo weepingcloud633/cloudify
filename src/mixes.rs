@@ -40,6 +40,10 @@ fn today() -> u64 {
     ((secs as i64 + crate::paths::utc_offset_secs()) / 86400).max(0) as u64
 }
 
+fn discover_file() -> std::path::PathBuf {
+    profiles::dir().join("discover.json")
+}
+
 pub fn cached() -> Option<Value> {
     let v: Value = serde_json::from_slice(&std::fs::read(file()).ok()?).ok()?;
     v["mixes"].as_array().filter(|a| !a.is_empty())?;
@@ -158,6 +162,7 @@ pub fn generate(force: bool) -> Result<Value, String> {
 
     let mut used: HashSet<String> = HashSet::new();
     let mut mixes = Vec::new();
+    let mut pool: Vec<Value> = Vec::new(); // radio songs no mix used: the raw material of Discover Weekly
     for (k, ((anchor, mine, _), h)) in jobs.into_iter().zip(handles).enumerate() {
         let disliked = library::flagged("disliked");
         let radio: Vec<Value> = h.join().unwrap_or_default().into_iter().filter(|t| !t["id"].as_str().is_some_and(|i| disliked.contains(i))).collect();
@@ -180,6 +185,7 @@ pub fn generate(force: bool) -> Result<Value, String> {
             }
             tracks.push(json!({"id": id, "title": t["title"], "artist": t["artist"], "album": t["album"], "dur": t["dur"], "thumb": t["thumb"]}));
         }
+        pool.extend(fresh);
         if tracks.is_empty() {
             continue;
         }
@@ -207,6 +213,38 @@ pub fn generate(force: bool) -> Result<Value, String> {
     }
     if mixes.is_empty() {
         return Err("Could not reach YouTube Music for your mixes".into());
+    }
+    // Discover Weekly: songs the person does not know yet, kept for the whole week
+    let known: HashSet<String> = t.values().flat_map(|e| e.1.iter()).filter_map(|s| s["id"].as_str().map(String::from)).collect();
+    let dis = library::flagged("disliked");
+    let week = day / 7;
+    let kept: Option<Vec<Value>> = std::fs::read(discover_file()).ok().and_then(|b| serde_json::from_slice::<Value>(&b).ok()).filter(|v| v["week"].as_u64() == Some(week) && !force).and_then(|v| v["tracks"].as_array().cloned());
+    let disc: Vec<Value> = match kept {
+        Some(k) => k.into_iter().filter(|s| !s["id"].as_str().is_some_and(|i| dis.contains(i))).collect(),
+        None => {
+            let mut seen: HashSet<String> = HashSet::new();
+            let mut d: Vec<Value> = pool
+                .into_iter()
+                .filter(|s| s["id"].as_str().is_some_and(|i| !i.is_empty() && !known.contains(i) && !dis.contains(i) && seen.insert(i.to_string())))
+                .map(|s| json!({"id": s["id"], "title": s["title"], "artist": s["artist"], "album": s["album"], "dur": s["dur"], "thumb": s["thumb"]}))
+                .collect();
+            rng.shuffle(&mut d);
+            d.truncate(30);
+            if d.len() >= 10 {
+                let _ = std::fs::write(discover_file(), json!({"week": week, "tracks": d}).to_string());
+            }
+            d
+        }
+    };
+    if disc.len() >= 10 {
+        let mut artists: Vec<String> = Vec::new();
+        for s in &disc {
+            let a = lead_artist(s);
+            if !a.is_empty() && !artists.contains(&a) {
+                artists.push(a);
+            }
+        }
+        mixes.insert(0, json!({"id": "discover", "name": "Discover Weekly", "desc": format!("New: {} and more", artists.iter().take(3).cloned().collect::<Vec<_>>().join(", ")), "tracks": disc}));
     }
     let out = json!({"day": day, "mixes": mixes});
     let tmp = file().with_extension("tmp");

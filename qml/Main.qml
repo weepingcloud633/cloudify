@@ -138,10 +138,7 @@ ApplicationWindow {
         PropertyAction { target: win; property: "immReveal"; value: 0 }
         ScriptAction { script: backend.trimMemory() }
     }
-    property bool searchSeen: false
-    property bool tracksSeen: false
-    function focusSearch() { Qt.callLater(function() { if (searchL.item) searchL.item.focusSearch() }) }
-    onPageChanged: { if (page === "search") searchSeen = true; if (page !== "home" && page !== "settings" && page !== "search" && page !== "stats") tracksSeen = true; if (page === "settings") settingsSeen = true; if (page === "local" && !localSeen) { localSeen = true; scanLocal() } }
+    onPageChanged: { if (page === "settings") settingsSeen = true; if (page === "local" && !localSeen) { localSeen = true; scanLocal() } }
     onVisibilityChanged: (v) => {
         Theme.windowActive = v !== Window.Minimized && v !== Window.Hidden
         if (!Theme.windowActive) backend.trimMemory()
@@ -155,16 +152,15 @@ ApplicationWindow {
     function reload() { lib = JSON.parse(backend.library()) }
     function isLiked(id) { for (var i = 0; i < lib.liked.length; i++) if (lib.liked[i].id === id) return true; return false }
     function toggleLike(t) { backend.toggleLike(JSON.stringify(t)); reload() }
-    function lazy(l) { l.active = true; return l.item }
-    function addTo(t) { var p = lazy(addMenuL); p.track = t; p.open() }
+    function addTo(t) { addMenu.track = t; addMenu.open() }
     function openPage(p) { page = p }
     property bool pinnedOpen: true
     property bool allOpen: false
     readonly property var pinnedList: lib.playlists.filter(function(p) { return p.pinned === true })
     function togglePin(pl) { backend.togglePin(pl.id); reload(); note = pl.pinned ? "Unpinned" : "Pinned to the sidebar" }
     function openPlaylist(pl) { shownPlaylist = pl; page = "playlist" }
-    function openImport() { lazy(importPopupL).open() }
-    function closeImport() { if (importPopupL.item) importPopupL.item.close() }
+    function openImport() { importPopup.open() }
+    function closeImport() { importPopup.close() }
     function playList(tracks, i) {
         if (settings.offline === true) {
             var t0 = tracks[i]
@@ -214,8 +210,8 @@ ApplicationWindow {
         note = on ? "Hidden in this playlist" : "Showing again"
     }
     function clearFlags(kind) { backend.setFlag(kind, "", false); reload(); note = Tr.t("Cleared") }
-    function openSleep() { lazy(sleepMenuL).open() }
-    function songMenuFor(t) { var p = lazy(songMenuL); p.track = t; p.open() }
+    function openSleep() { sleepMenu.open() }
+    function songMenuFor(t) { songMenu.track = t; songMenu.open() }
     // open the immersive player on a panel ("lyrics" | "queue" | "sleep")
     property string wantPanel: ""
     function openPanel(p) { if (immersive && imm.item) imm.item.swapPanel(p); else { wantPanel = p; immersive = true } }
@@ -347,7 +343,7 @@ ApplicationWindow {
     function setFull(on) { if (backend.setFullscreen(on)) nativeFull = on }
     function toggleFull() { if (!nativeFull && !immersive && cur) immersive = true; setFull(!nativeFull) }
     function showWindow() { show(); raise(); requestActivate() }
-    function quitApp() { quitting = true; logListen(); saveSession(); Qt.quit() }
+    function quitApp() { quitting = true; logListen(); saveSession(); if (audio) audio.stop(); Qt.quit() }
     function download(tracks) { if (tracks.length) { note = Tr.t("Downloading…"); backend.downloadTracks(JSON.stringify(tracks)) } }
     function toggle() { if (!cur) return; if (!audio) { startCurrent(); return } playing ? audio.pause() : audio.play() }
     function seek(ms) { if (audio) audio.seekTo(ms) }
@@ -428,7 +424,8 @@ ApplicationWindow {
                 if (settings.accent === "" && settings.dynamicColor) backend.palette(cur.thumb)
             }
         }
-        lateStart.start()
+        backend.startHotkeys()
+        if (!autotest && !playOnly) backend.startTray()
         // keep the Windows startup entry in step with the setting
         if (settings.autostart === true && !backend.autostartOn()) backend.setAutostart(true)
     }
@@ -447,8 +444,6 @@ ApplicationWindow {
             win.energy = Qt.vector4d(avg(0, 5), avg(5, 11), avg(11, 17), avg(17, 32))
         }
     }
-    // hotkeys and the tray icon wait until the window is up
-    Timer { id: lateStart; interval: 900; onTriggered: { backend.startHotkeys(); if (!win.autotest && !win.playOnly) backend.startTray() } }
     onCurChanged: { if (!autotest) backend.trayTip(cur ? cur.title + " - " + cur.artist : "Cloudify"); presenceT.restart() }
     onNoteChanged: { if (note !== "" && note !== "Loading…") noteTimer.restart() }
     Timer { id: noteTimer; interval: 4000; onTriggered: if (win.note !== "Loading…") win.note = "" }
@@ -507,6 +502,7 @@ ApplicationWindow {
             if (r.ok) { if (backend.launchInstaller()) Qt.quit(); else updateMsg = Tr.t("Could not start the installer") }
             else updateMsg = r.error
         }
+        onSimilarReady: (vid, json) => { var r = JSON.parse(json); similarItems = r.items.filter(function(t) { return t.id !== vid && !isDisliked(t.id) }).slice(0, 14) }
         onArtistReady: json => { var r = JSON.parse(json); note = ""; if (!r.ok) { note = r.error; return } artist = r.artist; page = "artist" }
         onSuggestionsReady: (q, json) => { suggestions = JSON.parse(json); suggestionsFor = q }
         onEngineStatus: json => engine = JSON.parse(json)
@@ -562,7 +558,7 @@ ApplicationWindow {
             spacing: 4
 
             NavItem { width: parent.width; icon: Theme.home; text: Tr.t("Home"); selected: win.page === "home"; onClicked: win.page = "home" }
-            NavItem { width: parent.width; icon: Theme.search; text: Tr.t("Search"); selected: win.page === "search"; onClicked: { win.page = "search"; win.focusSearch() } }
+            NavItem { width: parent.width; icon: Theme.search; text: Tr.t("Search"); selected: win.page === "search"; onClicked: { win.page = "search"; searchView.focusSearch() } }
             Item { width: 1; height: 8 }
             RowLayout {
                 width: parent.width; spacing: 10
@@ -664,9 +660,9 @@ ApplicationWindow {
                 Behavior on opacity { NumberAnimation { duration: active ? 240 : 120; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } }
             }
             Page { active: win.page === "home"; HomeView { anchors.fill: parent; app: win } }
-            Page { active: win.page === "search"; Loader { id: searchL; anchors.fill: parent; active: win.searchSeen; sourceComponent: Component { SearchView { anchors.fill: parent; app: win } } } }
+            Page { active: win.page === "search"; SearchView { id: searchView; anchors.fill: parent; app: win } }
             Page { active: win.page === "stats"; Loader { anchors.fill: parent; active: win.page === "stats"; sourceComponent: Component { StatsView { app: win } } } }
-            Page { active: win.page !== "home" && win.page !== "settings" && win.page !== "search" && win.page !== "stats"; Loader { anchors.fill: parent; active: win.tracksSeen; sourceComponent: Component { TracksPage { anchors.fill: parent; app: win } } } }
+            Page { active: win.page !== "home" && win.page !== "settings" && win.page !== "search" && win.page !== "stats"; TracksPage { id: tracksPage; anchors.fill: parent; app: win } }
             Page {
                 active: win.page === "settings"
                 Loader { anchors.fill: parent; active: win.settingsSeen; sourceComponent: Component { SettingsView { app: win } } }
@@ -746,85 +742,80 @@ ApplicationWindow {
     Shortcut { sequence: "Right"; enabled: win.immersive; onActivated: win.seek(win.position + 10000) }
     Shortcut { sequence: "Up"; enabled: win.immersive; onActivated: win.volume = Math.min(1, win.volume + 0.05) }
     Shortcut { sequence: "Down"; enabled: win.immersive; onActivated: win.volume = Math.max(0, win.volume - 0.05) }
-    Shortcut { sequence: "Space"; enabled: !(win.activeFocusItem && win.activeFocusItem.selectedText !== undefined); onActivated: win.toggle() }
+    Shortcut { sequence: "Space"; enabled: !searchView.searchActive && !edName.activeFocus && !importText.activeFocus; onActivated: win.toggle() }
 
     // ---- song actions ----
-    Loader { id: songMenuL; active: false; sourceComponent: Component {
-        Popup {
-            id: songMenu
-            property var track: null
-            anchors.centerIn: Overlay.overlay
-            modal: true; padding: 10
-            enter: Transition { ParallelAnimation { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 170; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } NumberAnimation { property: "scale"; from: 0.95; to: 1; duration: 260; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } } }
-            exit: Transition { ParallelAnimation { NumberAnimation { property: "opacity"; to: 0; duration: 130; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } NumberAnimation { property: "scale"; to: 0.97; duration: 130; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } } }
-            background: Rectangle { color: Theme.containerHighest; radius: Theme.radiusLarge }
-            Overlay.modal: Rectangle { color: "#99000000" }
-            contentItem: Column {
-                spacing: 2
-                Text { text: songMenu.track ? songMenu.track.title : ""; color: Theme.fg; font.family: Theme.headFont; font.pixelSize: 18; font.weight: Font.Bold; leftPadding: 8; bottomPadding: 8; topPadding: 4; elide: Text.ElideRight; width: 300 }
-                NavItem { width: 300; icon: "skip_next"; text: Tr.t("Play next"); onClicked: { win.playNext(songMenu.track); songMenu.close() } }
-                NavItem { width: 300; icon: "queue_music"; text: Tr.t("Add to queue"); onClicked: { win.enqueue(songMenu.track); songMenu.close() } }
-                NavItem { visible: win.page === "playlist" && win.shownPlaylist !== null && !win.shownPlaylist.temp; height: visible ? 48 : 0; width: 300; icon: "playlist_remove"; text: Tr.t("Remove from this playlist"); onClicked: { songMenu.close(); backend.removeFromPlaylist(win.shownPlaylist.id, songMenu.track.id); win.reload(); win.note = Tr.t("Removed") } }
-                NavItem { visible: songMenu.track !== null; height: visible ? 44 : 0; width: 300; icon: "thumb_down"; text: songMenu.track && win.isDisliked(songMenu.track.id) ? Tr.t("Remove dislike") : Tr.t("Dislike (don't recommend)"); onClicked: { songMenu.close(); win.toggleDislike(songMenu.track) } }
-                NavItem { visible: songMenu.track !== null; height: visible ? 44 : 0; width: 300; icon: "block"; text: songMenu.track && win.isExcluded(songMenu.track.id) ? Tr.t("Include in taste profile") : Tr.t("Exclude from taste profile"); onClicked: { songMenu.close(); win.toggleExclude(songMenu.track) } }
-                NavItem { visible: win.page === "playlist" && win.shownPlaylist !== null && !win.shownPlaylist.temp; height: visible ? 44 : 0; width: 300; icon: "visibility_off"; text: songMenu.track && win.shownPlaylist && win.isHidden(win.shownPlaylist.id, songMenu.track.id) ? Tr.t("Show in this playlist") : Tr.t("Hide in this playlist"); onClicked: { songMenu.close(); win.toggleHide(win.shownPlaylist.id, songMenu.track) } }
-                NavItem { width: 300; icon: "library_add"; text: Tr.t("Add to playlist"); onClicked: { songMenu.close(); win.addTo(songMenu.track) } }
-                NavItem { width: 300; icon: Theme.radio; text: Tr.t("Start radio"); onClicked: { win.startRadio(songMenu.track); songMenu.close() } }
-            }
+    Popup {
+        id: songMenu
+        property var track: null
+        anchors.centerIn: Overlay.overlay
+        modal: true; padding: 10
+        enter: Transition { ParallelAnimation { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 170; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } NumberAnimation { property: "scale"; from: 0.95; to: 1; duration: 260; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } } }
+        exit: Transition { ParallelAnimation { NumberAnimation { property: "opacity"; to: 0; duration: 130; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } NumberAnimation { property: "scale"; to: 0.97; duration: 130; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } } }
+        background: Rectangle { color: Theme.containerHighest; radius: Theme.radiusLarge }
+        Overlay.modal: Rectangle { color: "#99000000" }
+        contentItem: Column {
+            spacing: 2
+            Text { text: songMenu.track ? songMenu.track.title : ""; color: Theme.fg; font.family: Theme.headFont; font.pixelSize: 18; font.weight: Font.Bold; leftPadding: 8; bottomPadding: 8; topPadding: 4; elide: Text.ElideRight; width: 300 }
+            NavItem { width: 300; icon: "skip_next"; text: Tr.t("Play next"); onClicked: { win.playNext(songMenu.track); songMenu.close() } }
+            NavItem { width: 300; icon: "queue_music"; text: Tr.t("Add to queue"); onClicked: { win.enqueue(songMenu.track); songMenu.close() } }
+            NavItem { visible: win.page === "playlist" && win.shownPlaylist !== null && !win.shownPlaylist.temp; height: visible ? 48 : 0; width: 300; icon: "playlist_remove"; text: Tr.t("Remove from this playlist"); onClicked: { songMenu.close(); backend.removeFromPlaylist(win.shownPlaylist.id, songMenu.track.id); win.reload(); win.note = Tr.t("Removed") } }
+            NavItem { visible: songMenu.track !== null; height: visible ? 44 : 0; width: 300; icon: "thumb_down"; text: songMenu.track && win.isDisliked(songMenu.track.id) ? Tr.t("Remove dislike") : Tr.t("Dislike (don't recommend)"); onClicked: { songMenu.close(); win.toggleDislike(songMenu.track) } }
+            NavItem { visible: songMenu.track !== null; height: visible ? 44 : 0; width: 300; icon: "block"; text: songMenu.track && win.isExcluded(songMenu.track.id) ? Tr.t("Include in taste profile") : Tr.t("Exclude from taste profile"); onClicked: { songMenu.close(); win.toggleExclude(songMenu.track) } }
+            NavItem { visible: win.page === "playlist" && win.shownPlaylist !== null && !win.shownPlaylist.temp; height: visible ? 44 : 0; width: 300; icon: "visibility_off"; text: songMenu.track && win.shownPlaylist && win.isHidden(win.shownPlaylist.id, songMenu.track.id) ? Tr.t("Show in this playlist") : Tr.t("Hide in this playlist"); onClicked: { songMenu.close(); win.toggleHide(win.shownPlaylist.id, songMenu.track) } }
+            NavItem { width: 300; icon: "library_add"; text: Tr.t("Add to playlist"); onClicked: { songMenu.close(); win.addTo(songMenu.track) } }
+            NavItem { visible: songMenu.track !== null && songMenu.track.id.indexOf("local:") !== 0; height: visible ? 44 : 0; width: 300; icon: "person"; text: Tr.t("Go to artist"); onClicked: { songMenu.close(); win.goToArtist(songMenu.track.artist) } }
+            NavItem { width: 300; icon: Theme.radio; text: Tr.t("Start radio"); onClicked: { win.startRadio(songMenu.track); songMenu.close() } }
         }
-    } }
+    }
 
     // ---- sleep timer ----
-    Loader { id: sleepMenuL; active: false; sourceComponent: Component {
-        Popup {
-            id: sleepMenu
-            anchors.centerIn: Overlay.overlay
-            modal: true; padding: 10
-            enter: Transition { ParallelAnimation { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 170; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } NumberAnimation { property: "scale"; from: 0.95; to: 1; duration: 260; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } } }
-            exit: Transition { ParallelAnimation { NumberAnimation { property: "opacity"; to: 0; duration: 130; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } NumberAnimation { property: "scale"; to: 0.97; duration: 130; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } } }
-            background: Rectangle { color: Theme.containerHighest; radius: Theme.radiusLarge }
-            Overlay.modal: Rectangle { color: "#99000000" }
-            contentItem: Column {
-                spacing: 2
-                Text { text: Tr.t("Sleep timer"); color: Theme.fg; font.family: Theme.headFont; font.pixelSize: 18; font.weight: Font.Bold; leftPadding: 8; topPadding: 4; bottomPadding: win.sleepOn ? 0 : 8 }
-                Text { visible: win.sleepOn; text: win.sleepAtSongEnd ? Tr.t("Stops after this song") : Tr.t("Pauses in ") + win.fmt(win.sleepLeft); color: Theme.primary; font.family: Theme.bodyFont; font.pixelSize: 13; leftPadding: 8; bottomPadding: 8 }
-                Repeater {
-                    model: [{t: Tr.t("15 minutes"), m: 15}, {t: Tr.t("30 minutes"), m: 30}, {t: Tr.t("45 minutes"), m: 45}, {t: Tr.t("1 hour"), m: 60}, {t: Tr.t("2 hours"), m: 120}]
-                    delegate: NavItem { required property var modelData; width: 300; icon: "bedtime"; text: modelData.t; onClicked: { win.setSleep(modelData.m); sleepMenu.close() } }
-                }
-                NavItem { width: 300; icon: "music_note"; text: Tr.t("End of this song"); onClicked: { win.sleepAfterSong(); sleepMenu.close() } }
-                NavItem { visible: win.sleepOn; width: 300; icon: "close"; text: Tr.t("Turn off"); onClicked: { win.setSleep(0); sleepMenu.close() } }
+    Popup {
+        id: sleepMenu
+        anchors.centerIn: Overlay.overlay
+        modal: true; padding: 10
+        enter: Transition { ParallelAnimation { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 170; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } NumberAnimation { property: "scale"; from: 0.95; to: 1; duration: 260; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } } }
+        exit: Transition { ParallelAnimation { NumberAnimation { property: "opacity"; to: 0; duration: 130; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } NumberAnimation { property: "scale"; to: 0.97; duration: 130; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } } }
+        background: Rectangle { color: Theme.containerHighest; radius: Theme.radiusLarge }
+        Overlay.modal: Rectangle { color: "#99000000" }
+        contentItem: Column {
+            spacing: 2
+            Text { text: Tr.t("Sleep timer"); color: Theme.fg; font.family: Theme.headFont; font.pixelSize: 18; font.weight: Font.Bold; leftPadding: 8; topPadding: 4; bottomPadding: win.sleepOn ? 0 : 8 }
+            Text { visible: win.sleepOn; text: win.sleepAtSongEnd ? Tr.t("Stops after this song") : Tr.t("Pauses in ") + win.fmt(win.sleepLeft); color: Theme.primary; font.family: Theme.bodyFont; font.pixelSize: 13; leftPadding: 8; bottomPadding: 8 }
+            Repeater {
+                model: [{t: Tr.t("15 minutes"), m: 15}, {t: Tr.t("30 minutes"), m: 30}, {t: Tr.t("45 minutes"), m: 45}, {t: Tr.t("1 hour"), m: 60}, {t: Tr.t("2 hours"), m: 120}]
+                delegate: NavItem { required property var modelData; width: 300; icon: "bedtime"; text: modelData.t; onClicked: { win.setSleep(modelData.m); sleepMenu.close() } }
             }
+            NavItem { width: 300; icon: "music_note"; text: Tr.t("End of this song"); onClicked: { win.sleepAfterSong(); sleepMenu.close() } }
+            NavItem { visible: win.sleepOn; width: 300; icon: "close"; text: Tr.t("Turn off"); onClicked: { win.setSleep(0); sleepMenu.close() } }
         }
-    } }
+    }
 
     // ---- add to playlist ----
-    Loader { id: addMenuL; active: false; sourceComponent: Component {
-        Popup {
-            id: addMenu
-            property var track: null
-            anchors.centerIn: Overlay.overlay
-            modal: true; padding: 10
-            enter: Transition { ParallelAnimation { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 170; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } NumberAnimation { property: "scale"; from: 0.95; to: 1; duration: 260; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } } }
-            exit: Transition { ParallelAnimation { NumberAnimation { property: "opacity"; to: 0; duration: 130; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } NumberAnimation { property: "scale"; to: 0.97; duration: 130; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } } }
-            background: Rectangle { color: Theme.containerHighest; radius: Theme.radiusLarge }
-            Overlay.modal: Rectangle { color: "#99000000" }
-            contentItem: Column {
-                spacing: 2
-                Text { text: Tr.t("Add to playlist"); color: Theme.fg; font.family: Theme.headFont; font.pixelSize: 18; font.weight: Font.Bold; leftPadding: 8; bottomPadding: 8; topPadding: 4 }
-                Text { visible: win.lib.playlists.length === 0; text: Tr.t("Create a playlist first (＋ in the sidebar)"); color: Theme.fgVariant; font.family: Theme.bodyFont; leftPadding: 8; bottomPadding: 6 }
-                Repeater {
-                    model: win.lib.playlists
-                    delegate: NavItem {
-                        required property var modelData
-                        width: 300
-                        icon: "library_music"; text: modelData.name; trailing: modelData.tracks.length
-                        onClicked: { backend.addToPlaylist(modelData.id, JSON.stringify(addMenu.track)); win.reload(); win.note = Tr.t("Added to ") + modelData.name; addMenu.close() }
-                    }
+    Popup {
+        id: addMenu
+        property var track: null
+        anchors.centerIn: Overlay.overlay
+        modal: true; padding: 10
+        enter: Transition { ParallelAnimation { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 170; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } NumberAnimation { property: "scale"; from: 0.95; to: 1; duration: 260; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } } }
+        exit: Transition { ParallelAnimation { NumberAnimation { property: "opacity"; to: 0; duration: 130; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } NumberAnimation { property: "scale"; to: 0.97; duration: 130; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } } }
+        background: Rectangle { color: Theme.containerHighest; radius: Theme.radiusLarge }
+        Overlay.modal: Rectangle { color: "#99000000" }
+        contentItem: Column {
+            spacing: 2
+            Text { text: Tr.t("Add to playlist"); color: Theme.fg; font.family: Theme.headFont; font.pixelSize: 18; font.weight: Font.Bold; leftPadding: 8; bottomPadding: 8; topPadding: 4 }
+            Text { visible: win.lib.playlists.length === 0; text: Tr.t("Create a playlist first (＋ in the sidebar)"); color: Theme.fgVariant; font.family: Theme.bodyFont; leftPadding: 8; bottomPadding: 6 }
+            Repeater {
+                model: win.lib.playlists
+                delegate: NavItem {
+                    required property var modelData
+                    width: 300
+                    icon: "library_music"; text: modelData.name; trailing: modelData.tracks.length
+                    onClicked: { backend.addToPlaylist(modelData.id, JSON.stringify(addMenu.track)); win.reload(); win.note = Tr.t("Added to ") + modelData.name; addMenu.close() }
                 }
             }
         }
-    } }
+    }
 
     // ---- updates (GitHub releases) ----
     readonly property string version: backend.appVersion()
@@ -858,6 +849,17 @@ ApplicationWindow {
     function canPlay(t) { return settings.offline !== true || (t && t.id && (t.id.indexOf("local:") === 0 || cachedSet[t.id] === true)) }
     Timer { running: win.settings.offline === true; interval: 15000; repeat: true; triggeredOnStart: true; onTriggered: win.refreshCached() }
 
+    // ---- "Because you listened to": songs like the last one you played ----
+    property var similarItems: []
+    property string similarArtist: ""
+    function loadSimilar() {
+        if (settings.offline === true || recent.length === 0) return
+        var t = recent[0]
+        similarArtist = (t.artist || "").split(/[,&]/)[0].trim()
+        backend.similar(t.id)
+    }
+    Timer { running: !win.autotest && !win.playOnly; interval: 4500; onTriggered: win.loadSimilar() }
+    function goToArtist(name) { note = Tr.t("Opening artist…"); backend.openArtistNamed((name || "").split(/[,&]/)[0].trim()) }
     // ---- artists ----
     property var artist: null
     property var suggestions: []
@@ -879,10 +881,10 @@ ApplicationWindow {
     }
     property var dupPlaylist: null
     property var dupGroups: []
-    function openDupes(pl) { dupPlaylist = pl; dupGroups = findDupes(pl.tracks); lazy(dupPopupL).open() }
+    function openDupes(pl) { dupPlaylist = pl; dupGroups = findDupes(pl.tracks); dupPopup.open() }
     function removeDupes() {
         for (var g = 0; g < dupGroups.length; g++) for (var e = 0; e < dupGroups[g].extras.length; e++) backend.removeFromPlaylist(dupPlaylist.id, dupGroups[g].extras[e].id)
-        reload(); note = Tr.t("Removed duplicates"); if (dupPopupL.item) dupPopupL.item.close()
+        reload(); note = Tr.t("Removed duplicates"); dupPopup.close()
     }
 
     // ---- songs and local files ----
@@ -907,17 +909,14 @@ ApplicationWindow {
     readonly property var designColors: [["#7c5cff", "#3a2a9e"], ["#ff6b9d", "#9e2a5c"], ["#ffb347", "#b3541e"], ["#3ddc97", "#1b7a57"], ["#4cc9f0", "#2a5fa8"], ["#c77dff", "#5a2a8a"]]
     function openEditor(pl) {
         edPlaylist = pl; edId = pl ? pl.id : ""; edCover = ""
-        var ed = lazy(playlistEditorL)
-        ed.fill(pl ? pl.name : "", pl ? (pl.desc || "") : "")
-        ed.open()
+        edName.text = pl ? pl.name : ""; edDesc.text = pl ? (pl.desc || "") : ""
+        playlistEditor.open(); edName.forceActiveFocus()
     }
-    function closeEditor() { if (playlistEditorL.item) playlistEditorL.item.close() }
+    function closeEditor() { playlistEditor.close() }
     function saveEditor() {
-        var ed = playlistEditorL.item
-        if (!ed) return
-        var name = ed.nameText.trim()
-        if (!name) { ed.focusName(); return }
-        var r = JSON.parse(backend.savePlaylist(edId, name, ed.descText, edCover))
+        var name = edName.text.trim()
+        if (!name) { edName.forceActiveFocus(); return }
+        var r = JSON.parse(backend.savePlaylist(edId, name, edDesc.text, edCover))
         if (!r.ok) { note = r.error; return }
         var creating = edId === ""
         reload(); closeEditor()
@@ -925,243 +924,229 @@ ApplicationWindow {
         else if (shownPlaylist && shownPlaylist.id === r.playlist.id) shownPlaylist = r.playlist
     }
     function pickCover() { imageFor = "cover"; pickImage() }
-    Loader { id: playlistEditorL; active: false; sourceComponent: Component {
-        Popup {
-            onOpened: edName.forceActiveFocus()
-            function fill(n, d) { edName.text = n; edDesc.text = d }
-            readonly property string nameText: edName.text
-            readonly property string descText: edDesc.text
-            function focusName() { edName.forceActiveFocus() }
-            id: playlistEditor
-            anchors.centerIn: Overlay.overlay
-            modal: true; padding: 24; width: 460
-            enter: Transition { ParallelAnimation { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 170; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } NumberAnimation { property: "scale"; from: 0.95; to: 1; duration: 260; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } } }
-            exit: Transition { ParallelAnimation { NumberAnimation { property: "opacity"; to: 0; duration: 130 } NumberAnimation { property: "scale"; to: 0.97; duration: 130 } } }
-            background: Rectangle { color: Theme.containerHighest; radius: Theme.radiusLarge }
-            Overlay.modal: Rectangle { color: "#99000000" }
-            contentItem: Column {
-                spacing: 14
-                Row {
-                    spacing: 12
+    Popup {
+        onOpened: edName.forceActiveFocus()
+        id: playlistEditor
+        anchors.centerIn: Overlay.overlay
+        modal: true; padding: 24; width: 460
+        enter: Transition { ParallelAnimation { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 170; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } NumberAnimation { property: "scale"; from: 0.95; to: 1; duration: 260; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } } }
+        exit: Transition { ParallelAnimation { NumberAnimation { property: "opacity"; to: 0; duration: 130 } NumberAnimation { property: "scale"; to: 0.97; duration: 130 } } }
+        background: Rectangle { color: Theme.containerHighest; radius: Theme.radiusLarge }
+        Overlay.modal: Rectangle { color: "#99000000" }
+        contentItem: Column {
+            spacing: 14
+            Row {
+                spacing: 12
+                Rectangle {
+                    width: 44; height: 44; radius: 22; color: Theme.primaryContainer
+                    Text { anchors.centerIn: parent; text: "queue_music"; color: Theme.fgPrimaryContainer; font.family: Theme.iconFont; renderType: Text.NativeRendering; font.pixelSize: 24 }
+                }
+                Text { anchors.verticalCenter: parent.verticalCenter; text: win.edId === "" ? Tr.t("New Playlist") : Tr.t("Edit Playlist"); color: Theme.fg; font.family: Theme.headFont; font.pixelSize: 24; font.weight: Font.Bold }
+            }
+            // cover: a photo, or one of the designs
+            ListView {
+                id: covers
+                width: parent.width; height: 96
+                orientation: ListView.Horizontal; spacing: 12; clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                model: 7
+                delegate: Item {
+                    id: tile
+                    required property int index
+                    readonly property bool picked: index === 0 ? (win.edCover !== "" && win.edCover.indexOf("design:") !== 0 && win.edCover !== "none") : win.edCover === "design:" + (index - 1)
+                    width: 96; height: 96
+                    scale: tma.pressed ? 0.96 : 1
+                    Behavior on scale { NumberAnimation { duration: Theme.quick } }
                     Rectangle {
-                        width: 44; height: 44; radius: 22; color: Theme.primaryContainer
-                        Text { anchors.centerIn: parent; text: "queue_music"; color: Theme.fgPrimaryContainer; font.family: Theme.iconFont; renderType: Text.NativeRendering; font.pixelSize: 24 }
-                    }
-                    Text { anchors.verticalCenter: parent.verticalCenter; text: win.edId === "" ? Tr.t("New Playlist") : Tr.t("Edit Playlist"); color: Theme.fg; font.family: Theme.headFont; font.pixelSize: 24; font.weight: Font.Bold }
-                }
-                // cover: a photo, or one of the designs
-                ListView {
-                    id: covers
-                    width: parent.width; height: 96
-                    orientation: ListView.Horizontal; spacing: 12; clip: true
-                    boundsBehavior: Flickable.StopAtBounds
-                    model: 7
-                    delegate: Item {
-                        id: tile
-                        required property int index
-                        readonly property bool picked: index === 0 ? (win.edCover !== "" && win.edCover.indexOf("design:") !== 0 && win.edCover !== "none") : win.edCover === "design:" + (index - 1)
-                        width: 96; height: 96
-                        scale: tma.pressed ? 0.96 : 1
-                        Behavior on scale { NumberAnimation { duration: Theme.quick } }
-                        Rectangle {
-                            anchors.fill: parent; radius: 12
-                            color: Theme.container
-                            gradient: tile.index > 0 ? designGrad : null
-                            Gradient { id: designGrad; GradientStop { position: 0; color: tile.index > 0 ? win.designColors[tile.index - 1][0] : "#000" } GradientStop { position: 1; color: tile.index > 0 ? win.designColors[tile.index - 1][1] : "#000" } }
-                            Column {
-                                visible: tile.index === 0 && !tile.picked
-                                anchors.centerIn: parent; spacing: 4
-                                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "add_photo_alternate"; color: Theme.fgVariant; font.family: Theme.iconFont; renderType: Text.NativeRendering; font.pixelSize: 26 }
-                                Text { anchors.horizontalCenter: parent.horizontalCenter; text: Tr.t("Photo"); color: Theme.fgVariant; font.family: Theme.bodyFont; font.pixelSize: 12 }
-                            }
-                            Cover { visible: tile.index === 0 && tile.picked; anchors.fill: parent; radius: 12; source: tile.index === 0 && tile.picked ? win.edCover : "" }
-                            Text { visible: tile.index > 0; anchors.centerIn: parent; text: edName.text.trim() ? edName.text.trim().charAt(0).toUpperCase() : "♪"; color: "#d9ffffff"; font.family: Theme.headFont; font.weight: Font.Bold; font.pixelSize: 44 }
+                        anchors.fill: parent; radius: 12
+                        color: Theme.container
+                        gradient: tile.index > 0 ? designGrad : null
+                        Gradient { id: designGrad; GradientStop { position: 0; color: tile.index > 0 ? win.designColors[tile.index - 1][0] : "#000" } GradientStop { position: 1; color: tile.index > 0 ? win.designColors[tile.index - 1][1] : "#000" } }
+                        Column {
+                            visible: tile.index === 0 && !tile.picked
+                            anchors.centerIn: parent; spacing: 4
+                            Text { anchors.horizontalCenter: parent.horizontalCenter; text: "add_photo_alternate"; color: Theme.fgVariant; font.family: Theme.iconFont; renderType: Text.NativeRendering; font.pixelSize: 26 }
+                            Text { anchors.horizontalCenter: parent.horizontalCenter; text: Tr.t("Photo"); color: Theme.fgVariant; font.family: Theme.bodyFont; font.pixelSize: 12 }
                         }
-                        Rectangle { anchors.fill: parent; radius: 12; color: "transparent"; border.width: 3; border.color: tile.picked ? Theme.primary : "transparent"; Behavior on border.color { ColorAnimation { duration: Theme.quick } } }
-                        MouseArea { id: tma; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { if (tile.index === 0) win.pickCover(); else win.edCover = "design:" + (tile.index - 1) } }
+                        Cover { visible: tile.index === 0 && tile.picked; anchors.fill: parent; radius: 12; source: tile.index === 0 && tile.picked ? win.edCover : "" }
+                        Text { visible: tile.index > 0; anchors.centerIn: parent; text: edName.text.trim() ? edName.text.trim().charAt(0).toUpperCase() : "♪"; color: "#d9ffffff"; font.family: Theme.headFont; font.weight: Font.Bold; font.pixelSize: 44 }
                     }
-                }
-                TextField {
-                    id: edName
-                    width: parent.width; height: 48
-                    placeholderText: Tr.t("Name"); color: Theme.fg; placeholderTextColor: Theme.fgVariant
-                    font.family: Theme.bodyFont; font.pixelSize: 15; leftPadding: 18; maximumLength: 80
-                    background: Rectangle { radius: 24; color: Theme.container; border.width: edName.activeFocus ? 2 : 0; border.color: Theme.primary }
-                    onAccepted: win.saveEditor()
-                }
-                TextField {
-                    id: edDesc
-                    width: parent.width; height: 48
-                    placeholderText: Tr.t("Description (optional)"); color: Theme.fg; placeholderTextColor: Theme.fgVariant
-                    font.family: Theme.bodyFont; font.pixelSize: 15; leftPadding: 18; maximumLength: 300
-                    background: Rectangle { radius: 24; color: Theme.container; border.width: edDesc.activeFocus ? 2 : 0; border.color: Theme.primary }
-                    onAccepted: win.saveEditor()
-                }
-                Row {
-                    layoutDirection: Qt.RightToLeft; width: parent.width; spacing: 8
-                    PillButton { text: win.edId === "" ? Tr.t("Create") : Tr.t("Save"); variant: "filled"; enabled: edName.text.trim().length > 0; onClicked: win.saveEditor() }
-                    PillButton { text: Tr.t("Cancel"); variant: "text"; onClicked: playlistEditor.close() }
+                    Rectangle { anchors.fill: parent; radius: 12; color: "transparent"; border.width: 3; border.color: tile.picked ? Theme.primary : "transparent"; Behavior on border.color { ColorAnimation { duration: Theme.quick } } }
+                    MouseArea { id: tma; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { if (tile.index === 0) win.pickCover(); else win.edCover = "design:" + (tile.index - 1) } }
                 }
             }
+            TextField {
+                id: edName
+                width: parent.width; height: 48
+                placeholderText: Tr.t("Name"); color: Theme.fg; placeholderTextColor: Theme.fgVariant
+                font.family: Theme.bodyFont; font.pixelSize: 15; leftPadding: 18; maximumLength: 80
+                background: Rectangle { radius: 24; color: Theme.container; border.width: edName.activeFocus ? 2 : 0; border.color: Theme.primary }
+                onAccepted: win.saveEditor()
+            }
+            TextField {
+                id: edDesc
+                width: parent.width; height: 48
+                placeholderText: Tr.t("Description (optional)"); color: Theme.fg; placeholderTextColor: Theme.fgVariant
+                font.family: Theme.bodyFont; font.pixelSize: 15; leftPadding: 18; maximumLength: 300
+                background: Rectangle { radius: 24; color: Theme.container; border.width: edDesc.activeFocus ? 2 : 0; border.color: Theme.primary }
+                onAccepted: win.saveEditor()
+            }
+            Row {
+                layoutDirection: Qt.RightToLeft; width: parent.width; spacing: 8
+                PillButton { text: win.edId === "" ? Tr.t("Create") : Tr.t("Save"); variant: "filled"; enabled: edName.text.trim().length > 0; onClicked: win.saveEditor() }
+                PillButton { text: Tr.t("Cancel"); variant: "text"; onClicked: playlistEditor.close() }
+            }
         }
-    } }
+    }
 
     // ---- duplicates ----
-    Loader { id: dupPopupL; active: false; sourceComponent: Component {
-        Popup {
-            id: dupPopup
-            anchors.centerIn: Overlay.overlay
-            modal: true; padding: 24; width: 480
-            enter: Transition { ParallelAnimation { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 170 } NumberAnimation { property: "scale"; from: 0.95; to: 1; duration: 260; easing.type: Easing.OutCubic } } }
-            exit: Transition { NumberAnimation { property: "opacity"; to: 0; duration: 120 } }
-            background: Rectangle { color: Theme.containerHighest; radius: Theme.radiusLarge }
-            Overlay.modal: Rectangle { color: "#99000000" }
-            contentItem: Column {
-                spacing: 14
-                Text { text: win.dupGroups.length ? Tr.t("Duplicate songs") : Tr.t("No duplicates"); color: Theme.fg; font.family: Theme.headFont; font.pixelSize: 22; font.weight: Font.Bold }
-                Text { width: parent.width; wrapMode: Text.Wrap; color: Theme.fgVariant; font.family: Theme.bodyFont; font.pixelSize: 14
-                    text: win.dupGroups.length ? "These songs appear more than once in this playlist. The first copy stays." : Tr.t("Every song in this playlist is there only once.") }
-                ListView {
-                    visible: win.dupGroups.length > 0
-                    width: parent.width; height: Math.min(260, win.dupGroups.length * 52); clip: true
-                    model: win.dupGroups
-                    boundsBehavior: Flickable.StopAtBounds
-                    delegate: Item {
-                        required property var modelData
-                        width: ListView.view.width; height: 52
-                        Rectangle { anchors.fill: parent; radius: 14; color: Theme.container }
-                        Column { x: 14; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 100
-                            Text { width: parent.width; text: modelData.keep.title; elide: Text.ElideRight; color: Theme.fg; font.family: Theme.bodyFont; font.pixelSize: 14; font.weight: Font.DemiBold }
-                            Text { width: parent.width; text: modelData.keep.artist; elide: Text.ElideRight; color: Theme.fgVariant; font.family: Theme.bodyFont; font.pixelSize: 12 } }
-                        Text { anchors.right: parent.right; anchors.rightMargin: 14; anchors.verticalCenter: parent.verticalCenter; text: "+" + modelData.extras.length; color: Theme.primary; font.family: Theme.bodyFont; font.pixelSize: 14; font.weight: Font.Bold }
-                    }
-                }
-                Row {
-                    layoutDirection: Qt.RightToLeft; width: parent.width; spacing: 8
-                    PillButton { visible: win.dupGroups.length > 0; text: Tr.t("Remove duplicates"); icon: "delete_sweep"; variant: "filled"; onClicked: win.removeDupes() }
-                    PillButton { text: win.dupGroups.length ? Tr.t("Cancel") : Tr.t("Close"); variant: "text"; onClicked: dupPopup.close() }
+    Popup {
+        id: dupPopup
+        anchors.centerIn: Overlay.overlay
+        modal: true; padding: 24; width: 480
+        enter: Transition { ParallelAnimation { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 170 } NumberAnimation { property: "scale"; from: 0.95; to: 1; duration: 260; easing.type: Easing.OutCubic } } }
+        exit: Transition { NumberAnimation { property: "opacity"; to: 0; duration: 120 } }
+        background: Rectangle { color: Theme.containerHighest; radius: Theme.radiusLarge }
+        Overlay.modal: Rectangle { color: "#99000000" }
+        contentItem: Column {
+            spacing: 14
+            Text { text: win.dupGroups.length ? Tr.t("Duplicate songs") : Tr.t("No duplicates"); color: Theme.fg; font.family: Theme.headFont; font.pixelSize: 22; font.weight: Font.Bold }
+            Text { width: parent.width; wrapMode: Text.Wrap; color: Theme.fgVariant; font.family: Theme.bodyFont; font.pixelSize: 14
+                text: win.dupGroups.length ? "These songs appear more than once in this playlist. The first copy stays." : Tr.t("Every song in this playlist is there only once.") }
+            ListView {
+                visible: win.dupGroups.length > 0
+                width: parent.width; height: Math.min(260, win.dupGroups.length * 52); clip: true
+                model: win.dupGroups
+                boundsBehavior: Flickable.StopAtBounds
+                delegate: Item {
+                    required property var modelData
+                    width: ListView.view.width; height: 52
+                    Rectangle { anchors.fill: parent; radius: 14; color: Theme.container }
+                    Column { x: 14; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 100
+                        Text { width: parent.width; text: modelData.keep.title; elide: Text.ElideRight; color: Theme.fg; font.family: Theme.bodyFont; font.pixelSize: 14; font.weight: Font.DemiBold }
+                        Text { width: parent.width; text: modelData.keep.artist; elide: Text.ElideRight; color: Theme.fgVariant; font.family: Theme.bodyFont; font.pixelSize: 12 } }
+                    Text { anchors.right: parent.right; anchors.rightMargin: 14; anchors.verticalCenter: parent.verticalCenter; text: "+" + modelData.extras.length; color: Theme.primary; font.family: Theme.bodyFont; font.pixelSize: 14; font.weight: Font.Bold }
                 }
             }
+            Row {
+                layoutDirection: Qt.RightToLeft; width: parent.width; spacing: 8
+                PillButton { visible: win.dupGroups.length > 0; text: Tr.t("Remove duplicates"); icon: "delete_sweep"; variant: "filled"; onClicked: win.removeDupes() }
+                PillButton { text: win.dupGroups.length ? Tr.t("Cancel") : Tr.t("Close"); variant: "text"; onClicked: dupPopup.close() }
+            }
         }
-    } }
+    }
 
     // ---- delete a playlist ----
     property var delPlaylist: null
-    function askDelete(pl) { delPlaylist = pl; lazy(deletePopupL).open() }
-    Loader { id: deletePopupL; active: false; sourceComponent: Component {
-        Popup {
-            id: deletePopup
-            anchors.centerIn: Overlay.overlay
-            modal: true; padding: 24; width: 400
-            enter: Transition { ParallelAnimation { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 170 } NumberAnimation { property: "scale"; from: 0.95; to: 1; duration: 260; easing.type: Easing.OutCubic } } }
-            exit: Transition { NumberAnimation { property: "opacity"; to: 0; duration: 120 } }
-            background: Rectangle { color: Theme.containerHighest; radius: Theme.radiusLarge }
-            Overlay.modal: Rectangle { color: "#99000000" }
-            contentItem: Column {
-                spacing: 14
-                Rectangle { width: 48; height: 48; radius: 24; color: Theme.primaryContainer; Text { anchors.centerIn: parent; text: "delete"; color: Theme.fgPrimaryContainer; font.family: Theme.iconFont; renderType: Text.NativeRendering; font.pixelSize: 26 } }
-                Text { width: parent.width; text: "Delete \u201c" + (win.delPlaylist ? win.delPlaylist.name : "") + "\u201d?"; color: Theme.fg; font.family: Theme.headFont; font.pixelSize: 22; font.weight: Font.Bold; wrapMode: Text.Wrap }
-                Text { width: parent.width; text: Tr.t("This deletes the playlist from Cloudify. The songs themselves are not touched."); color: Theme.fgVariant; font.family: Theme.bodyFont; font.pixelSize: 14; wrapMode: Text.Wrap }
-                Row {
-                    layoutDirection: Qt.RightToLeft; width: parent.width; spacing: 8
-                    PillButton {
-                        text: Tr.t("Delete Playlist"); variant: "filled"
-                        onClicked: {
-                            backend.deletePlaylist(win.delPlaylist.id); win.reload()
-                            if (win.shownPlaylist && win.shownPlaylist.id === win.delPlaylist.id) { win.shownPlaylist = null; win.page = "playlists" }
-                            deletePopup.close(); win.note = Tr.t("Playlist deleted")
-                        }
+    function askDelete(pl) { delPlaylist = pl; deletePopup.open() }
+    Popup {
+        id: deletePopup
+        anchors.centerIn: Overlay.overlay
+        modal: true; padding: 24; width: 400
+        enter: Transition { ParallelAnimation { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 170 } NumberAnimation { property: "scale"; from: 0.95; to: 1; duration: 260; easing.type: Easing.OutCubic } } }
+        exit: Transition { NumberAnimation { property: "opacity"; to: 0; duration: 120 } }
+        background: Rectangle { color: Theme.containerHighest; radius: Theme.radiusLarge }
+        Overlay.modal: Rectangle { color: "#99000000" }
+        contentItem: Column {
+            spacing: 14
+            Rectangle { width: 48; height: 48; radius: 24; color: Theme.primaryContainer; Text { anchors.centerIn: parent; text: "delete"; color: Theme.fgPrimaryContainer; font.family: Theme.iconFont; renderType: Text.NativeRendering; font.pixelSize: 26 } }
+            Text { width: parent.width; text: "Delete \u201c" + (win.delPlaylist ? win.delPlaylist.name : "") + "\u201d?"; color: Theme.fg; font.family: Theme.headFont; font.pixelSize: 22; font.weight: Font.Bold; wrapMode: Text.Wrap }
+            Text { width: parent.width; text: Tr.t("This deletes the playlist from Cloudify. The songs themselves are not touched."); color: Theme.fgVariant; font.family: Theme.bodyFont; font.pixelSize: 14; wrapMode: Text.Wrap }
+            Row {
+                layoutDirection: Qt.RightToLeft; width: parent.width; spacing: 8
+                PillButton {
+                    text: Tr.t("Delete Playlist"); variant: "filled"
+                    onClicked: {
+                        backend.deletePlaylist(win.delPlaylist.id); win.reload()
+                        if (win.shownPlaylist && win.shownPlaylist.id === win.delPlaylist.id) { win.shownPlaylist = null; win.page = "playlists" }
+                        deletePopup.close(); win.note = Tr.t("Playlist deleted")
                     }
-                    PillButton { text: Tr.t("Cancel"); variant: "text"; onClicked: deletePopup.close() }
                 }
+                PillButton { text: Tr.t("Cancel"); variant: "text"; onClicked: deletePopup.close() }
             }
         }
-    } }
+    }
 
     // ---- right-click menu of a playlist ----
     property var menuPl: null
-    function playlistMenuFor(pl) { menuPl = pl; lazy(plMenuL).open() }
-    Loader { id: plMenuL; active: false; sourceComponent: Component {
-        Popup {
-            id: plMenu
-            anchors.centerIn: Overlay.overlay
-            modal: true; padding: 10
-            enter: Transition { ParallelAnimation { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 170 } NumberAnimation { property: "scale"; from: 0.95; to: 1; duration: 260; easing.type: Easing.OutCubic } } }
-            exit: Transition { NumberAnimation { property: "opacity"; to: 0; duration: 110 } }
-            background: Rectangle { color: Theme.containerHighest; radius: Theme.radiusLarge }
-            Overlay.modal: Rectangle { color: "#99000000" }
-            contentItem: Column {
-                spacing: 2
-                Text { text: win.menuPl ? win.menuPl.name : ""; color: Theme.fg; font.family: Theme.headFont; font.pixelSize: 18; font.weight: Font.Bold; leftPadding: 8; bottomPadding: 8; topPadding: 4; elide: Text.ElideRight; width: 280 }
-                NavItem { width: 280; icon: "push_pin"; text: win.menuPl && win.menuPl.pinned === true ? Tr.t("Unpin Playlist") : Tr.t("Pin Playlist"); onClicked: { plMenu.close(); win.togglePin(win.menuPl) } }
-                NavItem { width: 280; icon: "edit"; text: Tr.t("Edit Playlist"); onClicked: { plMenu.close(); win.openEditor(win.menuPl) } }
-                NavItem { width: 280; icon: "delete"; text: Tr.t("Delete Playlist"); onClicked: { plMenu.close(); win.askDelete(win.menuPl) } }
-            }
+    function playlistMenuFor(pl) { menuPl = pl; plMenu.open() }
+    Popup {
+        id: plMenu
+        anchors.centerIn: Overlay.overlay
+        modal: true; padding: 10
+        enter: Transition { ParallelAnimation { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 170 } NumberAnimation { property: "scale"; from: 0.95; to: 1; duration: 260; easing.type: Easing.OutCubic } } }
+        exit: Transition { NumberAnimation { property: "opacity"; to: 0; duration: 110 } }
+        background: Rectangle { color: Theme.containerHighest; radius: Theme.radiusLarge }
+        Overlay.modal: Rectangle { color: "#99000000" }
+        contentItem: Column {
+            spacing: 2
+            Text { text: win.menuPl ? win.menuPl.name : ""; color: Theme.fg; font.family: Theme.headFont; font.pixelSize: 18; font.weight: Font.Bold; leftPadding: 8; bottomPadding: 8; topPadding: 4; elide: Text.ElideRight; width: 280 }
+            NavItem { width: 280; icon: "push_pin"; text: win.menuPl && win.menuPl.pinned === true ? Tr.t("Unpin Playlist") : Tr.t("Pin Playlist"); onClicked: { plMenu.close(); win.togglePin(win.menuPl) } }
+            NavItem { width: 280; icon: "edit"; text: Tr.t("Edit Playlist"); onClicked: { plMenu.close(); win.openEditor(win.menuPl) } }
+            NavItem { width: 280; icon: "delete"; text: Tr.t("Delete Playlist"); onClicked: { plMenu.close(); win.askDelete(win.menuPl) } }
         }
-    } }
+    }
 
     // ---- Exportify opens in its own in-app window; what it exports is imported by itself ----
-    Loader { id: importPopupL; active: false; sourceComponent: Component {
-        Popup {
-            id: importPopup
-            anchors.centerIn: Overlay.overlay
-            modal: true; padding: 22; width: 520
-            enter: Transition { ParallelAnimation { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 170; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } NumberAnimation { property: "scale"; from: 0.95; to: 1; duration: 260; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } } }
-            exit: Transition { ParallelAnimation { NumberAnimation { property: "opacity"; to: 0; duration: 130; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } NumberAnimation { property: "scale"; to: 0.97; duration: 130; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } } }
-            background: Rectangle { color: Theme.containerHighest; radius: Theme.radiusLarge }
-            Overlay.modal: Rectangle { color: "#99000000" }
-            contentItem: Column {
-                spacing: 12
-                Text { text: Tr.t("Import a playlist"); color: Theme.fg; font.family: Theme.headFont; font.pixelSize: 22; font.weight: Font.Bold }
-                Text { text: "Paste a share code, a YouTube or Spotify playlist link, or songs (one per line: Artist - Title). Or choose a CSV or a .cloud file."; color: Theme.fgVariant; font.family: Theme.bodyFont; font.pixelSize: 14; wrapMode: Text.Wrap; width: parent.width }
-                ScrollView {
-                    width: parent.width; height: 130
-                    TextArea {
-                        id: importText
-                        wrapMode: TextEdit.Wrap; color: Theme.fg; placeholderText: Tr.t("Paste here"); placeholderTextColor: Theme.fgVariant
-                        font.family: Theme.bodyFont; font.pixelSize: 14; padding: 14
-                        background: Rectangle { radius: 18; color: Theme.container; border.width: importText.activeFocus ? 2 : 0; border.color: Theme.primary }
-                    }
+    Popup {
+        id: importPopup
+        anchors.centerIn: Overlay.overlay
+        modal: true; padding: 22; width: 520
+        enter: Transition { ParallelAnimation { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 170; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } NumberAnimation { property: "scale"; from: 0.95; to: 1; duration: 260; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } } }
+        exit: Transition { ParallelAnimation { NumberAnimation { property: "opacity"; to: 0; duration: 130; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } NumberAnimation { property: "scale"; to: 0.97; duration: 130; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } } }
+        background: Rectangle { color: Theme.containerHighest; radius: Theme.radiusLarge }
+        Overlay.modal: Rectangle { color: "#99000000" }
+        contentItem: Column {
+            spacing: 12
+            Text { text: Tr.t("Import a playlist"); color: Theme.fg; font.family: Theme.headFont; font.pixelSize: 22; font.weight: Font.Bold }
+            Text { text: "Paste a share code, a YouTube or Spotify playlist link, or songs (one per line: Artist - Title). Or choose a CSV or a .cloud file."; color: Theme.fgVariant; font.family: Theme.bodyFont; font.pixelSize: 14; wrapMode: Text.Wrap; width: parent.width }
+            ScrollView {
+                width: parent.width; height: 130
+                TextArea {
+                    id: importText
+                    wrapMode: TextEdit.Wrap; color: Theme.fg; placeholderText: Tr.t("Paste here"); placeholderTextColor: Theme.fgVariant
+                    font.family: Theme.bodyFont; font.pixelSize: 14; padding: 14
+                    background: Rectangle { radius: 18; color: Theme.container; border.width: importText.activeFocus ? 2 : 0; border.color: Theme.primary }
                 }
-                TextField {
-                    id: importName
-                    width: parent.width; height: 44
-                    placeholderText: Tr.t("Playlist name (optional)"); color: Theme.fg; placeholderTextColor: Theme.fgVariant
-                    font.family: Theme.bodyFont; font.pixelSize: 14; leftPadding: 18
-                    background: Rectangle { radius: 22; color: Theme.container; border.width: importName.activeFocus ? 2 : 0; border.color: Theme.primary }
+            }
+            TextField {
+                id: importName
+                width: parent.width; height: 44
+                placeholderText: Tr.t("Playlist name (optional)"); color: Theme.fg; placeholderTextColor: Theme.fgVariant
+                font.family: Theme.bodyFont; font.pixelSize: 14; leftPadding: 18
+                background: Rectangle { radius: 22; color: Theme.container; border.width: importName.activeFocus ? 2 : 0; border.color: Theme.primary }
+            }
+            Rectangle { visible: win.importFrac >= 0; width: parent.width; height: 6; radius: 3; color: Theme.secondaryContainer
+                Rectangle { width: parent.width * Math.max(0, win.importFrac); height: parent.height; radius: 3; color: Theme.primary } }
+            // the way in from elsewhere on the left, the decision on the right
+            Item {
+                width: parent.width; height: 48
+                Row {
+                    anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 8
+                    PillButton { text: Tr.t("Choose file"); icon: "folder_open"; onClicked: win.pickImport() }
+                    PillButton { text: Tr.t("Spotify"); icon: "graphic_eq"; onClicked: { importPopup.close(); backend.exportifyOpen(); win.note = Tr.t("Log in, then press Export All") } }
                 }
-                Rectangle { visible: win.importFrac >= 0; width: parent.width; height: 6; radius: 3; color: Theme.secondaryContainer
-                    Rectangle { width: parent.width * Math.max(0, win.importFrac); height: parent.height; radius: 3; color: Theme.primary } }
-                // the way in from elsewhere on the left, the decision on the right
-                Item {
-                    width: parent.width; height: 48
-                    Row {
-                        anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 8
-                        PillButton { text: Tr.t("Choose file"); icon: "folder_open"; onClicked: win.pickImport() }
-                        PillButton { text: Tr.t("Spotify"); icon: "graphic_eq"; onClicked: { importPopup.close(); backend.exportifyOpen(); win.note = Tr.t("Log in, then press Export All") } }
+                Row {
+                    anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 8
+                    PillButton { text: Tr.t("Cancel"); variant: "text"; onClicked: importPopup.close() }
+                    PillButton {
+                        implicitWidth: 120
+                        text: win.importFrac >= 0 ? Tr.t("Importing…") : Tr.t("Import"); icon: "file_download"; variant: "filled"; enabled: win.importFrac < 0 && importText.text.trim().length > 0
+                    onClicked: {
+                        var t = importText.text.trim()
+                        if (!t) return
+                        if (t.indexOf("CLOUD-") >= 0) {
+                            var r = JSON.parse(backend.importCode(t))
+                            if (r.ok) { win.reload(); win.openPlaylist(r.playlist); importPopup.close(); win.note = Tr.t("Imported") } else win.note = r.error
+                        } else if (/(youtube\.com|youtu\.be)\//i.test(t)) { importFrac = 0; backend.importLink(t.split(/\s+/)[0], importName.text) }
+                        else if (/spotify\.com\//i.test(t) && t.indexOf("\n") < 0) { importFrac = 0; backend.importSpotify(t.split(/\s+/)[0], importName.text) }
+                        else backend.importText(t, importName.text)
                     }
-                    Row {
-                        anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 8
-                        PillButton { text: Tr.t("Cancel"); variant: "text"; onClicked: importPopup.close() }
-                        PillButton {
-                            implicitWidth: 120
-                            text: win.importFrac >= 0 ? Tr.t("Importing…") : Tr.t("Import"); icon: "file_download"; variant: "filled"; enabled: win.importFrac < 0 && importText.text.trim().length > 0
-                        onClicked: {
-                            var t = importText.text.trim()
-                            if (!t) return
-                            if (t.indexOf("CLOUD-") >= 0) {
-                                var r = JSON.parse(backend.importCode(t))
-                                if (r.ok) { win.reload(); win.openPlaylist(r.playlist); importPopup.close(); win.note = Tr.t("Imported") } else win.note = r.error
-                            } else if (/(youtube\.com|youtu\.be)\//i.test(t)) { importFrac = 0; backend.importLink(t.split(/\s+/)[0], importName.text) }
-                            else if (/spotify\.com\//i.test(t) && t.indexOf("\n") < 0) { importFrac = 0; backend.importSpotify(t.split(/\s+/)[0], importName.text) }
-                            else backend.importText(t, importName.text)
-                        }
-                        }
                     }
                 }
             }
         }
-    } }
+    }
 
     function copyShareCode() { clip.text = backend.exportCode(shownPlaylist.id); clip.selectAll(); clip.copy(); note = Tr.t("Share code copied") }
     function search(q) { backend.search(q) }
@@ -1184,7 +1169,7 @@ ApplicationWindow {
     function shot(name) { if (shots) ((name.indexOf("immersive") === 0 || name === "reveal") ? imm : shell).grabToImage(function(r) { r.saveToFile(shots + name + ".png") }) }
     Timer { running: autotest; interval: 600; onTriggered: { backend.search("daft punk get lucky"); var pa = Qt.application.arguments.filter(function(a) { return a.indexOf("--palette=") === 0 })[0]; if (pa) backend.palette(pa.substring(10)) } }
     Timer { id: t1; interval: 9000; onTriggered: { win.shot("home"); t2.start() } }
-    Timer { id: t2; interval: 1200; onTriggered: { win.page = "search"; Qt.callLater(function() { searchL.item.run("drake") }); t3.interval = 5000; t3.start() } }
+    Timer { id: t2; interval: 1200; onTriggered: { win.page = "search"; searchView.run("drake"); t3.interval = 5000; t3.start() } }
     Timer { id: t3; interval: 900; onTriggered: { win.shot("search"); win.immersive = true; revealShot.start(); t4.start() } }
     Timer { id: revealShot; interval: 330; onTriggered: { console.log("AUTOTEST reveal=" + win.immReveal + " reach=" + win.revealReach + " anim=" + openMotion.running); win.shot("reveal") } }
     Timer { id: t4; interval: 1500; onTriggered: { win.shot("immersive"); if (imm.item) imm.item.swapPanel("lyrics"); p1.start() } }
@@ -1221,7 +1206,7 @@ ApplicationWindow {
     Timer { id: artistShot; interval: 4500; onTriggered: { win.page = "artist"; artistShot2.start(); console.log("AUTOTEST artist page=" + win.page + " songs=" + (win.artist ? win.artist.songs.length : -1) + " albums=" + (win.artist ? win.artist.albums.length : -1) + " name=" + (win.artist ? win.artist.name : "")) } }
     Timer { id: artistShot2; interval: 700; onTriggered: { win.shot("artist"); artistShot3.start() } }
     Timer { id: artistShot3; interval: 500; onTriggered: { win.page = "playlists"; win.openImport(); impShot.start() } }
-    Timer { id: impShot; interval: 900; onTriggered: { if (win.shots) importPopupL.item.contentItem.parent.grabToImage(function(r) { r.saveToFile(win.shots + "import.png") }); impClose.start() } }
+    Timer { id: impShot; interval: 900; onTriggered: { if (win.shots) importPopup.contentItem.parent.grabToImage(function(r) { r.saveToFile(win.shots + "import.png") }); impClose.start() } }
     Timer { id: impClose; interval: 500; onTriggered: { win.closeImport(); win.page = "home" } }
     Timer {
         id: t6; interval: 7000

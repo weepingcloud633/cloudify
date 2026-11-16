@@ -25,7 +25,7 @@ Item {
         Behavior on amplitude { NumberAnimation { duration: 300; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } }
         property real wavelength: 34
         property real phase: 0
-        Timer { running: r.playing && r.visible && Theme.motion && Theme.windowActive; interval: 42; repeat: true; onTriggered: parent.phase -= 0.17 }
+        Timer { running: r.playing && r.visible && Theme.motion; interval: 33; repeat: true; onTriggered: parent.phase -= 0.14 }
         property real thickness: r.expanded ? 6 : 4
         Behavior on thickness { NumberAnimation { duration: Theme.quick; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } }
         property real handleWidth: r.expanded ? 4 : 0

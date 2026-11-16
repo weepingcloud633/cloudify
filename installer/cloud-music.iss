@@ -1,6 +1,6 @@
 ; Cloudify installer, by weepingcloud
 #define AppName "Cloudify"
-#define AppVersion "0.17.0"
+#define AppVersion "0.18.0"
 #define Publisher "weepingcloud"
 
 [Setup]

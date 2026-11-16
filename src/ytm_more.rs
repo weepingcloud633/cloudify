@@ -112,6 +112,12 @@ pub fn album_tracks(browse_id: &str, album: &str, artist: &str, thumb: &str) -> 
     Ok(Value::Array(tracks))
 }
 
+/// The first artist YouTube Music finds for a name: (browse id, name, picture).
+pub fn find_artist(name: &str) -> Option<(String, String, String)> {
+    let first = search_kind(name, ARTISTS).into_iter().next()?;
+    Some((first["browseId"].as_str()?.to_string(), first["title"].as_str().unwrap_or(name).to_string(), first["thumb"].as_str().unwrap_or("").to_string()))
+}
+
 /// An artist page: name, picture, top songs and albums.
 pub fn artist_page(browse_id: &str, name: &str, thumb_url: &str) -> Result<Value, String> {
     let resp = post("browse", json!({"context": ctx(), "browseId": browse_id}))?;

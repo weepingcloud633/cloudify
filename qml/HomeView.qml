@@ -59,6 +59,7 @@ Flickable {
             property real wavelength: 64
             property real phase: modelData.p
             property real cornerRadius: width * 0.45
+            Timer { running: r.visible && Theme.motion && Theme.windowActive; interval: 50; repeat: true; onTriggered: parent.phase += 0.004 }
             fragmentShader: "qrc:/shaders/wavy_pill.frag.qsb"
         }
     }
@@ -236,6 +237,31 @@ Flickable {
                     Text { y: 184; text: mc.modelData.name; color: Theme.fg; font.family: Theme.bodyFont; font.pixelSize: 15; font.weight: Font.DemiBold; elide: Text.ElideRight; width: parent.width }
                     Text { y: 205; text: mc.modelData.desc; color: Theme.fgVariant; font.family: Theme.bodyFont; font.pixelSize: 12; elide: Text.ElideRight; width: parent.width }
                     MouseArea { id: mma; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: r.app.openMix(mc.modelData) }
+                }
+            }
+        }
+
+        // ---- because you listened to ----
+        Column {
+            visible: r.app.similarItems.length > 0
+            width: parent.width; spacing: 12
+            SectionHead { icon: "radio"; title: Tr.t("Because you listened to ") + r.app.similarArtist }
+            ListView {
+                width: parent.width; height: 214
+                orientation: ListView.Horizontal; spacing: 16; clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                model: r.app.similarItems
+                delegate: Item {
+                    id: sc
+                    required property var modelData
+                    required property int index
+                    width: 150; height: 214
+                    scale: sma.pressed ? 0.97 : 1
+                    Behavior on scale { NumberAnimation { duration: Theme.quick; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } }
+                    Cover { width: 150; height: 150; radius: 22; source: sc.modelData.thumb || "" }
+                    Text { y: 158; text: sc.modelData.title; color: Theme.fg; font.family: Theme.bodyFont; font.pixelSize: 14; font.weight: Font.DemiBold; elide: Text.ElideRight; width: parent.width }
+                    Text { y: 179; text: sc.modelData.artist; color: Theme.fgVariant; font.family: Theme.bodyFont; font.pixelSize: 12; elide: Text.ElideRight; width: parent.width }
+                    MouseArea { id: sma; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: r.app.playList(r.app.similarItems, sc.index) }
                 }
             }
         }

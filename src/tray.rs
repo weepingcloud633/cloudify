@@ -9,6 +9,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
 const WM_TRAY: u32 = WM_APP + 1;
 const WM_TIP: u32 = WM_APP + 2;
+const WM_SHOW: u32 = WM_APP + 3;
 const ITEMS: [(&str, &str); 5] = [("show", "Show Cloudify"), ("playpause", "Play / Pause"), ("next", "Next"), ("prev", "Previous"), ("quit", "Quit")];
 
 static ON_ACTION: OnceLock<Box<dyn Fn(&'static str) + Send + Sync>> = OnceLock::new();
@@ -63,6 +64,12 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
             }
             0
         }
+        WM_SHOW => {
+            if let Some(f) = ON_ACTION.get() {
+                f("show");
+            }
+            0
+        }
         WM_TIP => {
             let mut n = nid(hwnd);
             n.uFlags = NIF_TIP;
@@ -105,6 +112,27 @@ pub fn start(on_action: impl Fn(&'static str) + Send + Sync + 'static) {
             DispatchMessageW(&msg);
         }
     });
+}
+
+/// Take the icon out of the notification area (on quit, so no ghost is left behind).
+pub fn remove() {
+    let h = HWND_TRAY.swap(0, Ordering::Relaxed);
+    if h != 0 {
+        unsafe {
+            Shell_NotifyIconW(NIM_DELETE, &nid(h as HWND));
+        }
+    }
+}
+
+/// A second launch: wake the running Cloudify's window.
+pub fn ask_to_show() {
+    unsafe {
+        let class: Vec<u16> = "CloudifyTray".encode_utf16().chain(std::iter::once(0)).collect();
+        let w = FindWindowW(class.as_ptr(), std::ptr::null());
+        if !w.is_null() {
+            PostMessageW(w, WM_SHOW, 0, 0);
+        }
+    }
 }
 
 /// Show what is playing in the icon's tooltip.
