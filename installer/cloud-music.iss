@@ -23,8 +23,8 @@ PrivilegesRequiredOverridesAllowed=dialog
 UninstallDisplayName={#AppName}
 UninstallDisplayIcon={app}\cloud-music.exe
 WizardStyle=modern
-CloseApplications=yes
-RestartApplications=yes
+CloseApplications=no
+RestartApplications=no
 SetupIconFile=..\assets\cloud-music.ico
 
 [Tasks]
@@ -51,3 +51,13 @@ Filename: "{app}\cloud-music.exe"; Description: "Launch {#AppName}"; Flags: nowa
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{localappdata}\Cloud Music\cache"
+
+[Code]
+// older versions keep running hidden in the tray and ignore the close request, which hangs the installer
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var R: Integer;
+begin
+  Exec('taskkill.exe', '/F /IM cloud-music.exe', '', SW_HIDE, ewWaitUntilTerminated, R);
+  Sleep(500);
+  Result := '';
+end;
