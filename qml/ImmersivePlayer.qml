@@ -1,4 +1,4 @@
-import QtQuick
+﻿import QtQuick
 import QtQuick.Controls.Basic
 
 // The immersive player, laid out as Swiftify's: the cover colours poured over the window, the song
@@ -46,6 +46,22 @@ Item {
 
     readonly property bool grey: Theme.neutralSeed
     readonly property color accent: grey ? Qt.rgba(0.92, 0.92, 0.92, 1) : Qt.hsla(Theme.hue, 0.72, 0.82, 1)
+    // fullscreen: the controls fade away after five quiet seconds and come back with the mouse
+    readonly property bool fullscreen: r.app.nativeFull
+    property bool chromeHidden: false
+    property real chromeA: chromeHidden && fullscreen ? 0 : 1
+    Behavior on chromeA { NumberAnimation { duration: chromeHidden ? 400 : 180; easing.type: Easing.OutCubic } }
+    Timer { id: idle; interval: 5000; running: r.fullscreen && !r.chromeHidden; onTriggered: r.chromeHidden = true }
+    onFullscreenChanged: { chromeHidden = false; idle.restart() }
+    property real lastX: -1
+    property real lastY: -1
+    HoverHandler {
+        cursorShape: r.fullscreen && r.chromeHidden ? Qt.BlankCursor : Qt.ArrowCursor
+        onPointChanged: {
+            var x = point.position.x, y = point.position.y
+            if (Math.abs(x - r.lastX) > 2 || Math.abs(y - r.lastY) > 2) { r.lastX = x; r.lastY = y; r.chromeHidden = false; idle.restart() }
+        }
+    }
     readonly property color faint: Qt.rgba(1, 1, 1, 0.62)
 
     component Move: NumberAnimation { duration: r.mo(500); easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve }
@@ -98,7 +114,7 @@ Item {
         property real wavelength: 70
         property real phase: spin
         property real cornerRadius: width * 0.45
-        Timer { running: r.visible && Theme.motion && Theme.windowActive; interval: 40; repeat: true; onTriggered: parent.spin += 0.004 }
+        Timer { running: r.visible && Theme.motion && Theme.windowActive; interval: 66; repeat: true; onTriggered: parent.spin += 0.0065 }
         fragmentShader: "qrc:/shaders/wavy_pill.frag.qsb"
     }
     Blob { x: -120; y: -100; width: 460; height: 460; spin: 0.5 }
@@ -124,12 +140,12 @@ Item {
         Text { anchors.centerIn: parent; text: g.icon; color: "white"; font.family: Theme.iconFont; renderType: Text.NativeRendering; font.pixelSize: 18 }
         MouseArea { id: gma; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: g.clicked() }
     }
-    Glass { x: 24; y: 44; icon: "close"; onClicked: r.close() }
+    Glass { x: 24; y: 44; icon: "close"; opacity: r.chromeA; enabled: r.chromeA > 0.5; onClicked: r.close() }
     Glass {
-        x: 66; y: 44
-        icon: r.Window.window && r.Window.window.visibility === Window.FullScreen ? "fullscreen_exit" : "fullscreen"
-        on: r.Window.window && r.Window.window.visibility === Window.FullScreen
-        onClicked: { var w = r.Window.window; if (w.visibility === Window.FullScreen) w.showNormal(); else w.showFullScreen() }
+        x: 66; y: 44; opacity: r.chromeA; enabled: r.chromeA > 0.5
+        icon: r.app.nativeFull ? "fullscreen_exit" : "fullscreen"
+        on: r.app.nativeFull
+        onClicked: r.app.setFull(!r.app.nativeFull)
     }
 
     // segmented switch: artwork / lyrics / up next / sleep
@@ -137,7 +153,7 @@ Item {
         id: sw
         readonly property var icons: ["image", "lyrics", "queue_music", "bedtime", "tune"]
         readonly property real segW: 19 + 24
-        anchors.right: parent.right; anchors.rightMargin: 24; y: 44
+        anchors.right: parent.right; anchors.rightMargin: 24; y: 44; opacity: r.chromeA; enabled: r.chromeA > 0.5
         width: segW * icons.length + 8; height: 34
         Rectangle { anchors.fill: parent; radius: height / 2; color: Qt.rgba(1, 1, 1, 0.12); border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.1) }
         Rectangle {
@@ -255,7 +271,7 @@ Item {
                     spacing: r.compact ? 2 : 5
                     Text {
                         width: parent.width; height: r.titleH
-                        text: r.app.cur ? r.app.cur.title : "Nothing playing"
+                        text: r.app.cur ? r.app.cur.title : Tr.t("Nothing playing")
                         horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
                         wrapMode: Text.WordWrap; maximumLineCount: 2; elide: Text.ElideRight
                         color: "white"; font.family: Theme.headFont; font.pixelSize: r.titleSize; font.weight: Font.Bold; font.letterSpacing: -0.3
@@ -276,6 +292,7 @@ Item {
 
                 Item {
                     id: progress
+                    opacity: r.chromeA
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: Math.min(details.width, r.compact ? details.width : Math.max(320, r.artSize + 80))
                     height: 18
@@ -293,6 +310,7 @@ Item {
                 Row {
                     anchors.horizontalCenter: parent.horizontalCenter
                     spacing: r.compact ? Math.max(8, Math.min(28, (details.width - 196) / 4)) : 28
+                    opacity: r.chromeA
                     IconButton { anchors.verticalCenter: parent.verticalCenter; icon: "shuffle"; ink: r.app.shuffle ? r.accent : "white"; size: 40; iconSize: 24; onClicked: r.app.shuffle = !r.app.shuffle }
                     IconButton { anchors.verticalCenter: parent.verticalCenter; icon: "skip_previous"; ink: "white"; size: 40; iconSize: 30; onClicked: r.app.prev() }
                     Item {
@@ -307,6 +325,7 @@ Item {
                 // the speaker mutes
                 Row {
                     id: vol
+                    opacity: r.chromeA
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.horizontalCenterOffset: -15
                     spacing: 10
@@ -357,7 +376,7 @@ Item {
             Text {
                 visible: r.app.lyr.state !== "ready"
                 anchors.centerIn: parent
-                text: !r.app.cur ? "Play a song to see its lyrics" : r.app.lyr.state === "loading" ? "Loading lyrics…" : "Lyrics unavailable"
+                text: !r.app.cur ? Tr.t("Play a song to see its lyrics") : r.app.lyr.state === "loading" ? Tr.t("Loading lyrics…") : Tr.t("Lyrics unavailable")
                 color: Qt.rgba(1, 1, 1, 0.7); font.family: Theme.bodyFont; font.pixelSize: 16
             }
             ListView {
@@ -429,7 +448,7 @@ Item {
                     Timer { id: fl; interval: 80; onTriggered: ln.flashed = false }
                     MouseArea { anchors.fill: parent; enabled: r.app.lyr.synced; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: { ln.flashed = true; fl.restart(); r.app.seek(ln.modelData.t) } }
                 }
-                footer: Text { leftPadding: 18; topPadding: 46; text: "Lyrics provided by lrclib.net"; color: Qt.rgba(1, 1, 1, 0.4); font.family: Theme.bodyFont; font.pixelSize: 12 }
+                footer: Text { leftPadding: 18; topPadding: 46; text: Tr.t("Lyrics provided by lrclib.net"); color: Qt.rgba(1, 1, 1, 0.4); font.family: Theme.bodyFont; font.pixelSize: 12 }
             }
         }
     }
@@ -438,7 +457,7 @@ Item {
     Component {
         id: queuePanel
         Item {
-            Text { visible: !r.app.cur; anchors.horizontalCenter: parent.horizontalCenter; y: 80; text: "Queue empty"; color: Qt.rgba(1, 1, 1, 0.7); font.family: Theme.bodyFont; font.pixelSize: 16 }
+            Text { visible: !r.app.cur; anchors.horizontalCenter: parent.horizontalCenter; y: 80; text: Tr.t("Queue empty"); color: Qt.rgba(1, 1, 1, 0.7); font.family: Theme.bodyFont; font.pixelSize: 16 }
             ListView {
                 id: ql
                 anchors.fill: parent
@@ -504,11 +523,38 @@ Item {
     }
 
 
+    component HSlider: Item {
+        id: hs
+        property real from: 0
+        property real to: 1
+        property real step: 0.1
+        property real value: 0
+        signal moved(real v)
+        height: 30
+        readonly property real frac: Math.max(0, Math.min(1, (value - from) / (to - from)))
+        readonly property bool big: hma.pressed || hma.containsMouse
+        Rectangle { y: parent.height / 2 - height / 2; width: parent.width; height: hs.big ? 10 : 8; radius: height / 2; color: Qt.rgba(1, 1, 1, 0.16); Behavior on height { NumberAnimation { duration: Theme.quick } } }
+        Rectangle { y: parent.height / 2 - height / 2; width: Math.max(height, parent.width * hs.frac); height: hs.big ? 10 : 8; radius: height / 2; color: r.accent; Behavior on height { NumberAnimation { duration: Theme.quick } } }
+        Rectangle { x: Math.min(parent.width - 3, Math.max(0, parent.width * hs.frac - 1.5)); y: parent.height / 2 - 10; width: 4; height: 20; radius: 2; color: "white" }
+        MouseArea {
+            id: hma; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+            function setFrom(mx) {
+                var f = Math.max(0, Math.min(1, mx / width))
+                var v = Math.round((hs.from + f * (hs.to - hs.from)) / hs.step) * hs.step
+                hs.moved(Math.max(hs.from, Math.min(hs.to, v)))
+            }
+            onPressed: m => setFrom(m.x)
+            onPositionChanged: m => { if (pressed) setFrom(m.x) }
+        }
+    }
+
     // ---------------- sound: the equalizer ----------------
     Component {
         id: soundPanel
-        Item {
+        Flickable {
             id: sf
+            contentHeight: col.implicitHeight + 24
+            boundsBehavior: Flickable.StopAtBounds
             clip: true
             Column {
                 id: col
@@ -525,7 +571,7 @@ Item {
                         x: 16; y: 15; width: parent.width - 32; spacing: 14
                         Item {
                             width: parent.width; height: 40
-                            Text { anchors.verticalCenter: parent.verticalCenter; text: "Equalizer"; color: "white"; font.family: Theme.headFont; font.pixelSize: 20; font.weight: Font.Bold }
+                            Text { anchors.verticalCenter: parent.verticalCenter; text: Tr.t("Equalizer"); color: "white"; font.family: Theme.headFont; font.pixelSize: 20; font.weight: Font.Bold }
                             Row {
                                 anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 8
                                 Item {
@@ -537,6 +583,13 @@ Item {
                                     Text { id: pl; x: 16; anchors.verticalCenter: parent.verticalCenter; text: r.app.eqName; color: "white"; font.family: Theme.bodyFont; font.pixelSize: 14; font.weight: Font.DemiBold }
                                     Text { anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; text: "expand_more"; color: "white"; font.family: Theme.iconFont; renderType: Text.NativeRendering; font.pixelSize: 20 }
                                     MouseArea { id: pma; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: presetMenu.open() }
+                                }
+                                Item {
+                                    width: 36; height: 36
+                                    opacity: r.app.eqName === "Custom" ? 1 : 0.4
+                                    Rectangle { anchors.fill: parent; radius: 18; color: Qt.rgba(1, 1, 1, sma2.containsMouse ? 0.16 : 0.1) }
+                                    Text { anchors.centerIn: parent; text: "bookmark_add"; color: "white"; font.family: Theme.iconFont; renderType: Text.NativeRendering; font.pixelSize: 20 }
+                                    MouseArea { id: sma2; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; enabled: r.app.eqName === "Custom"; onClicked: { presetName.text = ""; savePopup.open(); presetName.forceActiveFocus() } }
                                 }
                                 Item {
                                     width: 36; height: 36
@@ -628,7 +681,66 @@ Item {
                         }
                     }
                 }
-                Text { width: parent.width; wrapMode: Text.Wrap; text: "Drag a band, or double-click it to reset. Changes apply to the song as it plays."; color: Qt.rgba(1, 1, 1, 0.45); font.family: Theme.bodyFont; font.pixelSize: 12 }
+                Rectangle {
+                    width: parent.width; radius: 20; color: Qt.rgba(1, 1, 1, 0.07)
+                    height: pbCol.implicitHeight + 30
+                    Column {
+                        id: pbCol
+                        x: 16; y: 15; width: parent.width - 32; spacing: 12
+                        Text { text: Tr.t("Playback"); color: "white"; font.family: Theme.headFont; font.pixelSize: 20; font.weight: Font.Bold }
+                        // label, slider, value
+                        Repeater {
+                            model: [
+                                {k: "preamp", t: Tr.t("Preamp"), from: -12, to: 12, step: 0.5, unit: " dB", def: 0},
+                                {k: "speed", t: Tr.t("Speed"), from: 0.5, to: 2, step: 0.05, unit: "×", def: 1},
+                                {k: "pitch", t: Tr.t("Pitch"), from: -12, to: 12, step: 1, unit: " st", def: 0}
+                            ]
+                            delegate: Item {
+                                id: prow
+                                required property var modelData
+                                width: parent.width; height: 34
+                                readonly property real val: r.app.settings[modelData.k]
+                                Text { id: pl2; width: 64; anchors.verticalCenter: parent.verticalCenter; text: modelData.t; color: Qt.rgba(1, 1, 1, 0.75); font.family: Theme.bodyFont; font.pixelSize: 13 }
+                                HSlider {
+                                    anchors.left: pl2.right; anchors.right: pv.left; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter
+                                    from: modelData.from; to: modelData.to; step: modelData.step; value: prow.val
+                                    onMoved: v => r.app.setSetting(modelData.k, v)
+                                }
+                                Rectangle {
+                                    id: pv
+                                    anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                    width: 64; height: 26; radius: 13; color: Qt.rgba(1, 1, 1, Math.abs(prow.val - modelData.def) > 0.001 ? 0.18 : 0.08)
+                                    Text { anchors.centerIn: parent; text: (prow.val > 0 && modelData.def === 0 ? "+" : "") + (modelData.k === "speed" ? prow.val.toFixed(2) : (modelData.k === "pitch" ? prow.val.toFixed(0) : prow.val.toFixed(1))) + modelData.unit; color: "white"; font.family: Theme.bodyFont; font.pixelSize: 12; font.weight: Font.DemiBold }
+                                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onDoubleClicked: r.app.setSetting(modelData.k, modelData.def) }
+                                }
+                            }
+                        }
+                        Item {
+                            width: parent.width; height: 34
+                            Text { anchors.verticalCenter: parent.verticalCenter; text: Tr.t("Normalize volume"); color: Qt.rgba(1, 1, 1, 0.75); font.family: Theme.bodyFont; font.pixelSize: 13 }
+                            Rectangle {
+                                id: nt
+                                anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                width: 52; height: 30; radius: 15; color: r.app.settings.normalize === true ? r.accent : Qt.rgba(1, 1, 1, 0.18)
+                                Behavior on color { ColorAnimation { duration: Theme.quick } }
+                                Rectangle { y: 3; x: r.app.settings.normalize === true ? parent.width - width - 3 : 3; width: 24; height: 24; radius: 12; color: r.app.settings.normalize === true ? "#141414" : "white"; Behavior on x { NumberAnimation { duration: Theme.quick; easing.type: Easing.OutCubic } } }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: r.app.setSetting("normalize", !(r.app.settings.normalize === true)) }
+                            }
+                        }
+                        Item {
+                            width: parent.width; height: 34
+                            Text { id: cl; width: 64; anchors.verticalCenter: parent.verticalCenter; text: Tr.t("Crossfade"); color: Qt.rgba(1, 1, 1, 0.75); font.family: Theme.bodyFont; font.pixelSize: 13 }
+                            HSlider {
+                                anchors.left: cl.right; anchors.right: cv.left; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter
+                                from: 0; to: 12; step: 1; value: r.app.settings.crossfade
+                                onMoved: v => r.app.setSetting("crossfade", v)
+                            }
+                            Rectangle { id: cv; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; width: 64; height: 26; radius: 13; color: Qt.rgba(1, 1, 1, r.app.settings.crossfade > 0 ? 0.18 : 0.08)
+                                Text { anchors.centerIn: parent; text: r.app.settings.crossfade > 0 ? r.app.settings.crossfade + " s" : Tr.t("Off"); color: "white"; font.family: Theme.bodyFont; font.pixelSize: 12; font.weight: Font.DemiBold } }
+                        }
+                    }
+                }
+                Text { width: parent.width; wrapMode: Text.Wrap; text: Tr.t("Drag a band, or double-click it to reset. Changes apply to the song as it plays."); color: Qt.rgba(1, 1, 1, 0.45); font.family: Theme.bodyFont; font.pixelSize: 12 }
             }
         }
     }
@@ -642,13 +754,42 @@ Item {
         Overlay.modal: Rectangle { color: "#99000000" }
         contentItem: ListView {
             clip: true; boundsBehavior: Flickable.StopAtBounds
-            header: Text { text: "Presets"; color: Theme.fg; font.family: Theme.headFont; font.pixelSize: 18; font.weight: Font.Bold; leftPadding: 8; topPadding: 4; bottomPadding: 8 }
-            model: r.app.eqPresets
+            header: Text { text: Tr.t("Presets"); color: Theme.fg; font.family: Theme.headFont; font.pixelSize: 18; font.weight: Font.Bold; leftPadding: 8; topPadding: 4; bottomPadding: 8 }
+            model: r.app.eqAll
             delegate: NavItem {
                 required property var modelData
+                required property int index
                 width: ListView.view.width; height: 44
-                icon: "graphic_eq"; text: modelData.n; selected: r.app.eqName === modelData.n
+                icon: index >= r.app.eqPresets.length ? "bookmark" : "graphic_eq"; text: modelData.n; selected: r.app.eqName === modelData.n
                 onClicked: { r.app.setEq(modelData.g); presetMenu.close() }
+                onRightClicked: if (index >= r.app.eqPresets.length) r.app.deleteEqPreset(modelData.n)
+            }
+        }
+    }
+
+    Popup {
+        id: savePopup
+        anchors.centerIn: Overlay.overlay
+        modal: true; padding: 22; width: 360
+        enter: Transition { ParallelAnimation { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 170 } NumberAnimation { property: "scale"; from: 0.95; to: 1; duration: 260; easing.type: Easing.OutCubic } } }
+        exit: Transition { NumberAnimation { property: "opacity"; to: 0; duration: 120 } }
+        background: Rectangle { color: Theme.containerHighest; radius: Theme.radiusLarge }
+        Overlay.modal: Rectangle { color: "#99000000" }
+        contentItem: Column {
+            spacing: 14
+            Text { text: Tr.t("Save equalizer preset"); color: Theme.fg; font.family: Theme.headFont; font.pixelSize: 20; font.weight: Font.Bold }
+            TextField {
+                id: presetName
+                width: parent.width; height: 46
+                placeholderText: Tr.t("Preset name"); color: Theme.fg; placeholderTextColor: Theme.fgVariant
+                font.family: Theme.bodyFont; font.pixelSize: 15; leftPadding: 18; maximumLength: 30
+                background: Rectangle { radius: 23; color: Theme.container; border.width: presetName.activeFocus ? 2 : 0; border.color: Theme.primary }
+                onAccepted: { r.app.saveEqPreset(presetName.text); savePopup.close() }
+            }
+            Row {
+                layoutDirection: Qt.RightToLeft; width: parent.width; spacing: 8
+                PillButton { text: Tr.t("Save"); variant: "filled"; enabled: presetName.text.trim().length > 0; onClicked: { r.app.saveEqPreset(presetName.text); savePopup.close() } }
+                PillButton { text: Tr.t("Cancel"); variant: "text"; onClicked: savePopup.close() }
             }
         }
     }
@@ -660,12 +801,12 @@ Item {
             Column {
                 anchors.centerIn: parent
                 width: Math.min(parent.width, 380); spacing: 10
-                Text { text: "Sleep timer"; color: "white"; font.family: Theme.headFont; font.pixelSize: 24; font.weight: Font.Bold }
-                Text { text: r.app.sleepAtSongEnd ? "Stops after this song" : (r.app.sleepEnd > 0 ? "Pauses in " + r.app.fmt(r.app.sleepLeft) : "Music fades out and pauses by itself"); color: r.app.sleepOn ? r.accent : Qt.rgba(1, 1, 1, 0.6); font.family: Theme.bodyFont; font.pixelSize: 14; bottomPadding: 8 }
+                Text { text: Tr.t("Sleep timer"); color: "white"; font.family: Theme.headFont; font.pixelSize: 24; font.weight: Font.Bold }
+                Text { text: r.app.sleepAtSongEnd ? Tr.t("Stops after this song") : (r.app.sleepEnd > 0 ? Tr.t("Pauses in ") + r.app.fmt(r.app.sleepLeft) : Tr.t("Music fades out and pauses by itself")); color: r.app.sleepOn ? r.accent : Qt.rgba(1, 1, 1, 0.6); font.family: Theme.bodyFont; font.pixelSize: 14; bottomPadding: 8 }
                 Flow {
                     width: parent.width; spacing: 8
                     Repeater {
-                        model: [{t: "15 min", m: 15}, {t: "30 min", m: 30}, {t: "45 min", m: 45}, {t: "1 hour", m: 60}, {t: "2 hours", m: 120}, {t: "End of song", m: -1}]
+                        model: [{t: Tr.t("15 min"), m: 15}, {t: Tr.t("30 min"), m: 30}, {t: Tr.t("45 min"), m: 45}, {t: Tr.t("1 hour"), m: 60}, {t: Tr.t("2 hours"), m: 120}, {t: Tr.t("End of song"), m: -1}]
                         delegate: Item {
                             required property var modelData
                             width: sl.implicitWidth + 36; height: 40
@@ -677,7 +818,7 @@ Item {
                         }
                     }
                 }
-                PillButton { visible: r.app.sleepOn; text: "Turn off"; icon: "close"; onClicked: r.app.setSleep(0) }
+                PillButton { visible: r.app.sleepOn; text: Tr.t("Turn off"); icon: "close"; onClicked: r.app.setSleep(0) }
             }
         }
     }

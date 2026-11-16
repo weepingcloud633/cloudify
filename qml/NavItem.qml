@@ -13,7 +13,7 @@ Item {
     signal clicked()
     signal rightClicked()
 
-    height: 48
+    height: 44
     scale: ma.pressed ? 0.98 : 1
     Behavior on scale { NumberAnimation { duration: Theme.quick; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } }
 

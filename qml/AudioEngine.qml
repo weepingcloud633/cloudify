@@ -11,9 +11,11 @@ Item {
     property real position: 0
     property real duration: 0
     signal ended()
+    signal advanced(string vid)
     signal failed(string message)
 
     function load(vid) { position = 0; duration = 0; api.audioLoad(vid) }
+    function preload(vid) { api.audioPreload(vid) }
     function play() { api.audioPlay() }
     function pause() { api.audioPause() }
     function stop() { api.audioStop(); playing = false; position = 0 }
@@ -28,7 +30,8 @@ Item {
             if (e.playing !== s.playing) e.playing = s.playing
             if (e.position !== s.pos) e.position = s.pos
             if (e.duration !== s.dur) e.duration = s.dur
-            if (s.event === "ended") e.ended()
+            if (s.event.indexOf("advanced:") === 0) e.advanced(s.event.substring(9))
+            else if (s.event === "ended") e.ended()
             else if (s.event !== "") e.failed(s.event.replace(/^error:\s*/, ""))
         }
     }

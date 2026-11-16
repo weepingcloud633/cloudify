@@ -1,4 +1,4 @@
-pragma Singleton
+﻿pragma Singleton
 import QtQuick
 
 // Tonal dark palette derived from one seed colour (the playing album art).

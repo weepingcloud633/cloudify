@@ -23,15 +23,18 @@
 
 | | |
 |---|---|
-| **Search** | Songs, albums and artists from YouTube Music, plus Spotify results if you add your own API keys. |
-| **Immersive player** | Full-window player with a spectrum ring around the cover, a blurred backdrop in the cover's colors, synced lyrics, an up-next queue, a sleep timer and a six-band equalizer. |
-| **Playlists** | Create, edit and pin playlists. Pick a cover photo or one of the generated designs. Pinned and all playlists show in the sidebar. |
+| **Search** | Songs, albums and artists from YouTube Music, with suggestions, recent searches and filters. Add your own Spotify API keys for Spotify results too. |
+| **Artist and album pages** | Top songs and albums for any artist; open an album to play it. |
+| **Immersive player** | Full-window player with a spectrum ring around the cover, a blurred backdrop in the cover's colors, synced lyrics, an up-next queue, a sleep timer and a sound panel. True fullscreen (F11) that hides the controls when the mouse rests. |
+| **Sound** | Six-band equalizer with 22 presets and your own, preamp, playback speed, pitch, volume normalization, crossfade and gapless playback, and an output device picker. |
+| **Playlists** | Create, edit and pin playlists. Pick a cover photo or a generated design. Find and remove duplicates, hide songs in one playlist. |
 | **Import and export** | Import from a YouTube or Spotify link, from Spotify through the built-in Exportify window, from a CSV, or from a share code. Export a playlist as a share code or a `.cloud` file. |
-| **Daily mixes** | Six mixes every day, built from the songs you like and play. |
+| **Daily mixes** | Six mixes every day, built from the songs you like and play. Dislike a song or exclude it from your taste profile and it stays out of your mixes. |
+| **Stats** | Listening time, the last 14 days, top songs and top artists. |
 | **Local files** | Scan your Music folder (or any folder) and play mp3, flac, ogg, wav and m4a files. |
-| **Queue tools** | Play next, add to queue, remove from queue, recently played. |
-| **Themes** | 16 color themes, dark, light and AMOLED, or follow the album art. |
-| **Downloads** | Save songs to `Music\Cloudify` with title, artist and album tags. |
+| **Offline mode** | Plays only what is downloaded or on your computer. |
+| **Everywhere in Windows** | Notification-area icon, open on startup, media keys and the Windows media overlay, optional Discord Rich Presence. |
+| **Themes and languages** | 58 color themes (dark, light, AMOLED) or follow the album art. English, Spanish, French, German, Portuguese, Russian and Arabic. |
 | **Auto-update** | Checks GitHub for a new version and installs it for you. |
 
 <p align="center">

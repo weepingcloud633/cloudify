@@ -1,4 +1,4 @@
-import QtQuick
+﻿import QtQuick
 
 // The immersive player's backdrop: the cover's own palette poured into a slow fluid that swells
 // with the bass (Swiftify's liquid field, shaders/liquid_backdrop.frag). Drawn small and stretched
@@ -9,8 +9,8 @@ Item {
     property real time: 37
     Timer {
         running: r.visible && Theme.windowActive && Theme.motion
-        interval: 33; repeat: true
-        onTriggered: r.time += 0.033
+        interval: 40; repeat: true
+        onTriggered: r.time += 0.040
     }
     function shade(i) {
         var s = Theme.swatches

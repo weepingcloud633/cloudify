@@ -1,4 +1,4 @@
-import QtQuick
+﻿import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
 
@@ -37,6 +37,7 @@ ListView {
         readonly property bool liked: r.app.isLiked(modelData.id)
         width: ListView.view.width - 10
         height: 64
+        opacity: !r.app.canPlay(modelData) ? 0.38 : (r.app.page === "playlist" && r.app.shownPlaylist && r.app.isHidden(r.app.shownPlaylist.id, modelData.id) ? 0.5 : 1)
 
         Rectangle {
             anchors.fill: parent
@@ -75,6 +76,7 @@ ListView {
                 }
             }
             Text {
+                visible: row.modelData.dur > 0
                 text: r.app.fmt(row.modelData.dur)
                 color: Theme.fgVariant
                 font.family: Theme.bodyFont; font.pixelSize: 13

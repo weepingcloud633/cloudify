@@ -1,4 +1,4 @@
-//! Playlists, liked songs, share codes and playlist import (same formats as Silva Music).
+//! Playlists, liked songs, share codes and playlist import.
 use crate::ytm;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use flate2::{read::ZlibDecoder, write::ZlibEncoder, Compression};
@@ -7,7 +7,6 @@ use std::io::{Read, Write};
 use std::sync::Mutex;
 
 pub const CODE_PREFIX: &str = "CLOUD-";
-const OLD_PREFIX: &str = "SILVA-";
 const MAX_CODE: u64 = 40 * 1024 * 1024;
 
 static LIB: Mutex<Option<Value>> = Mutex::new(None);
@@ -150,6 +149,57 @@ pub fn save_playlist(id: &str, name: &str, desc: &str, cover: &str) -> Result<Va
     .ok_or_else(|| "Playlist not found".to_string())
 }
 
+/// Mark a song as "disliked" (never recommended) or "excluded" (left out of the taste profile).
+/// `kind` is one of those two words; an empty `id` with `on == false` clears the whole list.
+pub fn set_flag(kind: &str, id: &str, on: bool) {
+    if kind != "disliked" && kind != "excluded" {
+        return;
+    }
+    with(|v| {
+        if !v[kind].is_array() {
+            v[kind] = json!([]);
+        }
+        let list = v[kind].as_array_mut().unwrap();
+        if id.is_empty() {
+            if !on {
+                list.clear();
+            }
+            return;
+        }
+        list.retain(|x| x.as_str() != Some(id));
+        if on {
+            list.push(json!(id));
+        }
+        // a song you dislike is no longer a song you like
+        if kind == "disliked" && on {
+            if let Some(liked) = v["liked"].as_array_mut() {
+                liked.retain(|t| t["id"].as_str() != Some(id));
+            }
+        }
+    });
+}
+
+/// Ids a kind of flag holds ("disliked" or "excluded").
+pub fn flagged(kind: &str) -> std::collections::HashSet<String> {
+    with(|v| v[kind].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default())
+}
+
+/// Hide a song in one playlist (it stays in the playlist, out of sight) or show it again.
+pub fn hide_in_playlist(playlist: &str, song: &str, on: bool) {
+    with(|v| {
+        if let Some(pl) = v["playlists"].as_array_mut().and_then(|a| a.iter_mut().find(|p| p["id"] == playlist)) {
+            if !pl["hidden"].is_array() {
+                pl["hidden"] = json!([]);
+            }
+            let list = pl["hidden"].as_array_mut().unwrap();
+            list.retain(|x| x.as_str() != Some(song));
+            if on {
+                list.push(json!(song));
+            }
+        }
+    });
+}
+
 /// Pin or unpin a playlist in the sidebar.
 pub fn toggle_pin(id: &str) {
     with(|v| {
@@ -195,10 +245,10 @@ pub fn encode(obj: &Value, strip_thumbs: bool) -> String {
     format!("{CODE_PREFIX}{}", URL_SAFE_NO_PAD.encode(z.finish().unwrap_or_default()))
 }
 
-/// Accepts a CLOUD- or SILVA- code, or the raw JSON of a .silva / .cloud file.
+/// Accepts a CLOUD- code, or the raw JSON of a .cloud file.
 pub fn decode(text: &str) -> Result<Value, String> {
     let s = text.trim();
-    let obj: Value = if let Some(i) = s.find(CODE_PREFIX).or_else(|| s.find(OLD_PREFIX)) {
+    let obj: Value = if let Some(i) = s.find(CODE_PREFIX) {
         let body: String = s[i + CODE_PREFIX.len()..]
             .chars()
             .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
@@ -208,11 +258,11 @@ pub fn decode(text: &str) -> Result<Value, String> {
         ZlibDecoder::new(&bytes[..]).take(MAX_CODE).read_to_end(&mut raw).map_err(|_| "Code is damaged")?;
         serde_json::from_slice(&raw).map_err(|_| "Code is damaged")?
     } else {
-        serde_json::from_str(s).map_err(|_| "Not a Cloud Music or Silva Music share")?
+        serde_json::from_str(s).map_err(|_| "Not a Cloudify share")?
     };
     match obj["app"].as_str() {
-        Some("cloud-music") | Some("silva-music") => Ok(obj),
-        _ => Err("Not a Cloud Music or Silva Music share".into()),
+        Some("cloud-music") => Ok(obj),
+        _ => Err("Not a Cloudify share".into()),
     }
 }
 
@@ -410,14 +460,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn code_roundtrip_and_old_prefix() {
-        let obj = json!({"app": "silva-music", "v": 1, "kind": "playlist", "name": "x", "tracks": [{"id": "a", "title": "T", "artist": "A", "album": "", "dur": 3, "thumb": "u"}]});
+    fn code_roundtrip() {
+        let obj = json!({"app": "cloud-music", "v": 1, "kind": "playlist", "name": "x", "tracks": [{"id": "a", "title": "T", "artist": "A", "album": "", "dur": 3, "thumb": "u"}]});
         let code = encode(&obj, true);
         assert!(code.starts_with("CLOUD-"));
         assert_eq!(decode(&code).unwrap()["tracks"][0]["thumb"], "");
-        let old = code.replacen("CLOUD-", "SILVA-", 1);
-        assert!(decode(&format!("hi {old} bye")).is_ok());
-        assert!(decode("SILVA-!!!").is_err());
+        assert!(decode(&format!("hi {code} bye")).is_ok());
+        assert!(decode("CLOUD-!!!").is_err());
     }
 
     #[test]

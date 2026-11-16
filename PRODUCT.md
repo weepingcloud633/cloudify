@@ -1,6 +1,6 @@
 # Product
 
-**Cloudify** is a Windows desktop music player by weepingcloud: search YouTube Music, play instantly from a local cache, keep playlists, import and export them. A Rust rewrite of Silva Music, built to start fast and stay light.
+**Cloudify** is a Windows desktop music player by weepingcloud: search YouTube Music, play instantly from a local cache, keep playlists, import and export them. Written in Rust to start fast and stay light.
 
 ## Register
 Product (Operate mode): an app used for hours. Scanability and responsiveness outrank expression; brand lives in details.

@@ -68,18 +68,21 @@ fn taste() -> HashMap<String, (f64, Vec<Value>)> {
             e.1.push(t.clone());
         }
     };
+    // songs the person turned away from do not count towards their taste
+    let (out, dis) = (library::flagged("excluded"), library::flagged("disliked"));
+    let skip = |t: &Value| t["id"].as_str().is_some_and(|i| out.contains(i) || dis.contains(i));
     let lib = library::snapshot();
-    for t in lib["liked"].as_array().into_iter().flatten() {
+    for t in lib["liked"].as_array().into_iter().flatten().filter(|t| !skip(t)) {
         add(t, 3.0);
     }
     for p in lib["playlists"].as_array().into_iter().flatten() {
-        for t in p["tracks"].as_array().into_iter().flatten().take(60) {
+        for t in p["tracks"].as_array().into_iter().flatten().take(60).filter(|t| !skip(t)) {
             add(t, 1.0);
         }
     }
     let recent = settings::get()["recent"].clone();
     let n = recent.as_array().map(|a| a.len()).unwrap_or(1).max(1) as f64;
-    for (i, t) in recent.as_array().into_iter().flatten().enumerate() {
+    for (i, t) in recent.as_array().into_iter().flatten().enumerate().filter(|(_, t)| !skip(t)) {
         add(t, 2.0 * (1.0 - i as f64 / n) + 0.5);
     }
     m
@@ -156,8 +159,9 @@ pub fn generate(force: bool) -> Result<Value, String> {
     let mut used: HashSet<String> = HashSet::new();
     let mut mixes = Vec::new();
     for (k, ((anchor, mine, _), h)) in jobs.into_iter().zip(handles).enumerate() {
-        let radio = h.join().unwrap_or_default();
-        let mut familiar = mine.into_iter().take(10).collect::<Vec<_>>().into_iter();
+        let disliked = library::flagged("disliked");
+        let radio: Vec<Value> = h.join().unwrap_or_default().into_iter().filter(|t| !t["id"].as_str().is_some_and(|i| disliked.contains(i))).collect();
+        let mut familiar = mine.into_iter().filter(|t| !t["id"].as_str().is_some_and(|i| disliked.contains(i))).take(10).collect::<Vec<_>>().into_iter();
         let mut fresh = radio.into_iter().filter(|t| t["id"].as_str().is_some_and(|i| !i.is_empty()));
         let mut seen: HashSet<String> = HashSet::new();
         let mut tracks: Vec<Value> = Vec::new();

@@ -1,5 +1,5 @@
 //! Resolve a track, download it into the cache while it plays, and serve byte ranges
-//! out of the growing file on 127.0.0.1 (same design as Silva Music).
+//! out of the growing file on 127.0.0.1.
 use crate::{paths, ytdlp};
 use std::collections::HashMap;
 use std::fs::{self, File};
@@ -99,6 +99,25 @@ impl Track {
     pub fn extension(&self) -> String {
         self.st.lock().unwrap().ext.clone()
     }
+}
+
+/// Ids of the songs whose audio is on this computer (offline mode plays these).
+pub fn cached_ids() -> Vec<String> {
+    let mut out = Vec::new();
+    if let Ok(rd) = fs::read_dir(audio_dir()) {
+        for e in rd.flatten() {
+            let name = e.file_name().to_string_lossy().into_owned();
+            if name.ends_with(".part") || name.ends_with(".tmp") {
+                continue;
+            }
+            if let Some(stem) = name.rsplit_once('.').map(|x| x.0) {
+                if e.metadata().map(|m| m.len() > 10_000).unwrap_or(false) {
+                    out.push(stem.to_string());
+                }
+            }
+        }
+    }
+    out
 }
 
 pub fn prepare(vid: &str) -> Result<Arc<Track>, String> {

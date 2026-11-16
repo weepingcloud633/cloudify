@@ -2,7 +2,6 @@
 Licensed GPL-3.0-or-later (see LICENSE).
 
 Credits
-- Silva Music: the app this was rewritten from (playback design, playlist import/export formats).
 - Swiftify (github.com/swiftify-org/swiftify, GPL-3.0, (C) shred0s): visual design reference.
 - yt-dlp (Unlicense): downloaded on first run, not bundled.
 - Qt 6 (LGPL-3.0): UI and media playback, linked dynamically.

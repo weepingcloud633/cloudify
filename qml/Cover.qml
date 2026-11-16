@@ -1,4 +1,4 @@
-import QtQuick
+﻿import QtQuick
 
 // Album art with rounded or scalloped edges (Swiftify's rounded_image.frag).
 Item {
@@ -24,8 +24,8 @@ Item {
         id: img
         visible: false
         source: r.sharp(r.source)
-        sourceSize.width: Math.max(128, Math.ceil(r.width * 2 / 128) * 128)
-        sourceSize.height: Math.max(128, Math.ceil(r.height * 2 / 128) * 128)
+        sourceSize.width: Math.max(64, Math.ceil(r.width * Screen.devicePixelRatio / 64) * 64)
+        sourceSize.height: Math.max(64, Math.ceil(r.height * Screen.devicePixelRatio / 64) * 64)
         asynchronous: true
         cache: true
     }

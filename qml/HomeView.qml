@@ -1,4 +1,4 @@
-import QtQuick
+﻿import QtQuick
 import QtQuick.Controls.Basic
 
 Flickable {
@@ -43,7 +43,7 @@ Flickable {
     }
     readonly property string greeting: {
         var h = new Date().getHours()
-        return h < 5 ? "Up late…" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"
+        return h < 5 ? Tr.t("Up late…") : h < 12 ? Tr.t("Good morning") : h < 18 ? Tr.t("Good afternoon") : Tr.t("Good evening")
     }
 
     // big soft scalloped shapes drifting behind the top of the page (Swiftify's flowers)
@@ -59,7 +59,6 @@ Flickable {
             property real wavelength: 64
             property real phase: modelData.p
             property real cornerRadius: width * 0.45
-            Timer { running: r.visible && Theme.motion && Theme.windowActive; interval: 50; repeat: true; onTriggered: parent.phase += 0.004 }
             fragmentShader: "qrc:/shaders/wavy_pill.frag.qsb"
         }
     }
@@ -73,7 +72,7 @@ Flickable {
 
         Column {
             spacing: 8
-            Text { text: "Cloudify"; color: Theme.primary; font.family: Theme.headFont; font.pixelSize: 46; font.weight: Font.Bold; font.letterSpacing: -0.6 }
+            Text { text: Tr.t("Cloudify"); color: Theme.primary; font.family: Theme.headFont; font.pixelSize: 46; font.weight: Font.Bold; font.letterSpacing: -0.6 }
             Row {
                 spacing: 12
                 Rectangle {
@@ -94,13 +93,14 @@ Flickable {
                 Column {
                     anchors.verticalCenter: parent.verticalCenter; width: parent.width - 330
                     Text { text: "Cloudify " + (r.app.update.latest || "") + " is available"; color: Theme.fgPrimaryContainer; font.family: Theme.bodyFont; font.pixelSize: 15; font.weight: Font.DemiBold; elide: Text.ElideRight; width: parent.width }
-                    Text { text: r.app.updatePct >= 0 ? "Downloading… " + r.app.updatePct + "%" : (r.app.updateMsg !== "" ? r.app.updateMsg : "You have " + r.app.update.current); color: Theme.fgPrimaryContainer; opacity: 0.8; font.family: Theme.bodyFont; font.pixelSize: 13; elide: Text.ElideRight; width: parent.width }
+                    Text { text: r.app.updatePct >= 0 ? Tr.t("Downloading… ") + r.app.updatePct + "%" : (r.app.updateMsg !== "" ? r.app.updateMsg : (r.app.update.notes ? r.app.update.notes.split("
+")[0] : "You have " + r.app.update.current)); color: Theme.fgPrimaryContainer; opacity: 0.8; font.family: Theme.bodyFont; font.pixelSize: 13; elide: Text.ElideRight; width: parent.width }
                 }
             }
             PillButton {
                 anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter
                 variant: "filled"; enabled: r.app.updatePct < 0
-                text: r.app.update.installable ? "Update now" : "Open download page"; icon: r.app.update.installable ? "download" : "open_in_new"
+                text: r.app.update.installable ? Tr.t("Update now") : Tr.t("Open download page"); icon: r.app.update.installable ? "download" : "open_in_new"
                 onClicked: r.app.update.installable ? r.app.installUpdate() : Qt.openUrlExternally(r.app.update.page)
             }
         }
@@ -139,13 +139,13 @@ Flickable {
                     width: parent.width - parent.height - 24
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 6
-                    Text { text: r.app.cur ? "NOW PLAYING" : "NOTHING PLAYING"; color: Theme.primary; font.family: Theme.bodyFont; font.pixelSize: 12; font.weight: Font.Bold; font.letterSpacing: 1.4 }
+                    Text { text: r.app.cur ? Tr.t("NOW PLAYING") : Tr.t("NOTHING PLAYING"); color: Theme.primary; font.family: Theme.bodyFont; font.pixelSize: 12; font.weight: Font.Bold; font.letterSpacing: 1.4 }
                     Text {
-                        text: r.app.cur ? r.app.cur.title : "Search for a song"
+                        text: r.app.cur ? r.app.cur.title : Tr.t("Search for a song")
                         color: Theme.fg; font.family: Theme.headFont; font.pixelSize: 32; font.weight: Font.Bold
                         elide: Text.ElideRight; width: parent.width
                     }
-                    Text { text: r.app.cur ? r.app.cur.artist : "Your next favourite is a search away"; color: Theme.fgVariant; font.family: Theme.bodyFont; font.pixelSize: 17; elide: Text.ElideRight; width: parent.width }
+                    Text { text: r.app.cur ? r.app.cur.artist : Tr.t("Your next favourite is a search away"); color: Theme.fgVariant; font.family: Theme.bodyFont; font.pixelSize: 17; elide: Text.ElideRight; width: parent.width }
                     Text { visible: r.app.cur !== null && (r.app.cur.album || "") !== ""; text: r.app.cur && r.app.cur.album ? r.app.cur.album : ""; color: Qt.rgba(Theme.fgVariant.r, Theme.fgVariant.g, Theme.fgVariant.b, 0.6); font.family: Theme.bodyFont; font.pixelSize: 14; elide: Text.ElideRight; width: parent.width }
                     Item { width: 1; height: 8 }
                     Row {
@@ -155,8 +155,8 @@ Flickable {
                             icon: r.app.playing ? "pause" : "play_arrow"
                             onClicked: r.app.toggle()
                         }
-                        Text { text: r.app.note !== "" ? r.app.note : (r.app.playing ? "Pause" : "Play"); color: Theme.fg; font.family: Theme.bodyFont; font.pixelSize: 15; font.weight: Font.Medium; anchors.verticalCenter: parent.verticalCenter; elide: Text.ElideRight; width: Math.min(implicitWidth, 260) }
-                        PillButton { visible: r.app.cur !== null; text: "Start radio"; icon: Theme.radio; anchors.verticalCenter: parent.verticalCenter; onClicked: r.app.startRadio(r.app.cur) }
+                        Text { text: r.app.note !== "" ? r.app.note : (r.app.playing ? Tr.t("Pause") : Tr.t("Play")); color: Theme.fg; font.family: Theme.bodyFont; font.pixelSize: 15; font.weight: Font.Medium; anchors.verticalCenter: parent.verticalCenter; elide: Text.ElideRight; width: Math.min(implicitWidth, 260) }
+                        PillButton { visible: r.app.cur !== null; text: Tr.t("Start radio"); icon: Theme.radio; anchors.verticalCenter: parent.verticalCenter; onClicked: r.app.startRadio(r.app.cur) }
                         IconButton { visible: r.app.cur !== null; icon: "more_horiz"; anchors.verticalCenter: parent.verticalCenter; onClicked: r.app.songMenuFor(r.app.cur) }
                     }
                     WaveSeek {
@@ -174,8 +174,8 @@ Flickable {
             spacing: 16
             Repeater {
                 model: [
-                    {t: "Liked songs", s: r.app.lib.liked.length + " liked", i: "favorite", go: "liked"},
-                    {t: "Your playlists", s: r.app.lib.playlists.length + (r.app.lib.playlists.length === 1 ? " collection" : " collections"), i: "library_music", go: "playlists"}
+                    {t: Tr.t("Liked songs"), s: r.app.lib.liked.length + " " + Tr.t("liked"), i: "favorite", go: "liked"},
+                    {t: Tr.t("Your playlists"), s: r.app.lib.playlists.length + (" " + (r.app.lib.playlists.length === 1 ? Tr.t("collection") : Tr.t("collections"))), i: "library_music", go: "playlists"}
                 ]
                 delegate: Item {
                     id: card
@@ -208,7 +208,7 @@ Flickable {
         Column {
             visible: r.app.mixes.length > 0 || r.app.mixNote !== ""
             width: parent.width; spacing: 12
-            SectionHead { icon: "auto_awesome"; title: "Daily mixes"; button: r.app.mixes.length > 0 ? (r.app.mixBusy ? "Mixing…" : "Remix") : ""; buttonIcon: "shuffle"; onPressed: if (!r.app.mixBusy) r.app.remix(true) }
+            SectionHead { icon: "auto_awesome"; title: Tr.t("Daily mixes"); button: r.app.mixes.length > 0 ? (r.app.mixBusy ? Tr.t("Mixing…") : Tr.t("Remix")) : ""; buttonIcon: "shuffle"; onPressed: if (!r.app.mixBusy) r.app.remix(true) }
             Text { visible: r.app.mixes.length === 0; text: r.app.mixNote; color: Theme.fgVariant; font.family: Theme.bodyFont; font.pixelSize: 14 }
             ListView {
                 visible: r.app.mixes.length > 0
@@ -244,7 +244,7 @@ Flickable {
         Column {
             visible: r.app.recent.length > 0
             width: parent.width; spacing: 12
-            SectionHead { icon: "history"; title: "Recently played" }
+            SectionHead { icon: "history"; title: Tr.t("Recently played") }
             ListView {
                 width: parent.width; height: 214
                 orientation: ListView.Horizontal; spacing: 16; clip: true
@@ -268,10 +268,10 @@ Flickable {
         // ---- playlists ----
         SectionHead {
             icon: r.app.pinnedList.length > 0 ? "push_pin" : "library_music"
-            title: r.app.pinnedList.length > 0 ? "Pinned playlists" : "Playlists"
-            button: r.app.lib.playlists.length > 0 ? "See All" : "Import"
+            title: r.app.pinnedList.length > 0 ? Tr.t("Pinned playlists") : Tr.t("Playlists")
+            button: r.app.lib.playlists.length > 0 ? Tr.t("See All") : Tr.t("Import")
             buttonIcon: r.app.lib.playlists.length > 0 ? "arrow_forward" : "file_download"
-            button2: r.app.lib.playlists.length > 0 ? "Import" : ""
+            button2: r.app.lib.playlists.length > 0 ? Tr.t("Import") : ""
             onPressed2: r.app.openImport()
             onPressed: r.app.lib.playlists.length > 0 ? r.app.openPage("playlists") : r.app.openImport()
         }
@@ -288,13 +288,13 @@ Flickable {
                     Behavior on scale { NumberAnimation { duration: Theme.quick; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } }
                     PlaylistArt { width: 176; height: 176; radius: 22; pl: pc.modelData }
                     Text { y: 184; text: pc.modelData.name; color: Theme.fg; font.family: Theme.bodyFont; font.pixelSize: 15; font.weight: Font.DemiBold; elide: Text.ElideRight; width: parent.width }
-                    Text { y: 205; text: pc.modelData.tracks.length + " songs"; color: Theme.fgVariant; font.family: Theme.bodyFont; font.pixelSize: 13 }
+                    Text { y: 205; text: pc.modelData.tracks.length + " " + Tr.t("songs"); color: Theme.fgVariant; font.family: Theme.bodyFont; font.pixelSize: 13 }
                     MouseArea { id: pma; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; acceptedButtons: Qt.LeftButton | Qt.RightButton; onClicked: m => m.button === Qt.RightButton ? r.app.playlistMenuFor(pc.modelData) : r.app.openPlaylist(pc.modelData) }
                 }
             }
             Text {
                 visible: r.app.lib.playlists.length === 0
-                text: "No playlists yet. Create one with ＋ in the sidebar, or import one."
+                text: Tr.t("No playlists yet. Create one with ＋ in the sidebar, or import one.")
                 color: Theme.fgVariant; font.family: Theme.bodyFont; font.pixelSize: 14
             }
         }

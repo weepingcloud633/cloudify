@@ -1,4 +1,4 @@
-import QtQuick
+﻿import QtQuick
 import QtQuick.Layouts
 
 // The floating pill player bar.
@@ -45,7 +45,7 @@ Item {
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 1
-                    Text { Layout.fillWidth: true; text: r.app.cur ? r.app.cur.title : "Nothing playing"; color: Theme.fg; font.family: Theme.bodyFont; font.pixelSize: 15; font.weight: Font.DemiBold; elide: Text.ElideRight }
+                    Text { Layout.fillWidth: true; text: r.app.cur ? r.app.cur.title : Tr.t("Nothing playing"); color: Theme.fg; font.family: Theme.bodyFont; font.pixelSize: 15; font.weight: Font.DemiBold; elide: Text.ElideRight }
                     Text { Layout.fillWidth: true; text: r.app.note !== "" ? r.app.note : (r.app.cur ? r.app.cur.artist : ""); color: r.app.note !== "" ? Theme.primary : Theme.fgVariant; font.family: Theme.bodyFont; font.pixelSize: 13; elide: Text.ElideRight }
                 }
             }

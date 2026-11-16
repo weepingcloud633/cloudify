@@ -1,4 +1,4 @@
-import QtQuick
+﻿import QtQuick
 
 // Our own window bar: drag to move, double-click to maximize, three buttons.
 Item {
@@ -18,7 +18,7 @@ Item {
     Row {
         x: 16; anchors.verticalCenter: parent.verticalCenter; spacing: 10
         Text { text: "cloud"; font.family: Theme.iconFont; renderType: Text.NativeRendering; font.pixelSize: 20; color: Theme.primary; anchors.verticalCenter: parent.verticalCenter }
-        Text { text: "Cloudify"; color: r.ink; font.family: Theme.bodyFont; font.pixelSize: 13; font.weight: Font.Medium; anchors.verticalCenter: parent.verticalCenter }
+        Text { text: Tr.t("Cloudify"); color: r.ink; font.family: Theme.bodyFont; font.pixelSize: 13; font.weight: Font.Medium; anchors.verticalCenter: parent.verticalCenter }
     }
 
     Row {

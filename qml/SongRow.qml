@@ -1,4 +1,4 @@
-import QtQuick
+﻿import QtQuick
 import QtQuick.Layouts
 
 // One song in a search result. `spotify` rows have no YouTube id yet: playing one finds a match first.
@@ -12,6 +12,7 @@ Item {
     readonly property bool current: app.cur !== null && song.id !== "" && app.cur.id === song.id
     readonly property bool liked: song.id !== "" && app.isLiked(song.id)
     height: 64
+    opacity: spotify || app.canPlay(song) ? 1 : 0.38
 
     Rectangle {
         anchors.fill: parent; radius: Theme.radiusNormal

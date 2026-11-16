@@ -112,6 +112,67 @@ pub fn album_tracks(browse_id: &str, album: &str, artist: &str, thumb: &str) -> 
     Ok(Value::Array(tracks))
 }
 
+/// An artist page: name, picture, top songs and albums.
+pub fn artist_page(browse_id: &str, name: &str, thumb_url: &str) -> Result<Value, String> {
+    let resp = post("browse", json!({"context": ctx(), "browseId": browse_id}))?;
+    let h = &resp["header"];
+    let hdr = if h["musicImmersiveHeaderRenderer"].is_object() { &h["musicImmersiveHeaderRenderer"] } else { &h["musicVisualHeaderRenderer"] };
+    let title = hdr["title"]["runs"][0]["text"].as_str().unwrap_or(name).to_string();
+    let desc = hdr["description"]["runs"][0]["text"].as_str().unwrap_or("").chars().take(280).collect::<String>();
+    let pic = hdr["thumbnail"]["musicThumbnailRenderer"]["thumbnail"]["thumbnails"].as_array().and_then(|a| a.last()).and_then(|t| t["url"].as_str()).unwrap_or(thumb_url).to_string();
+    let (mut songs, mut albums): (Vec<Value>, Vec<Value>) = (Vec::new(), Vec::new());
+    fn walk(v: &Value, name: &str, songs: &mut Vec<Value>, albums: &mut Vec<Value>) {
+        match v {
+            Value::Object(m) => {
+                if let Some(r) = m.get("musicResponsiveListItemRenderer") {
+                    if let (Some(id), Some(cols)) = (r["playlistItemData"]["videoId"].as_str(), r["flexColumns"].as_array()) {
+                        songs.push(json!({"id": id, "title": cols.first().map(runs_text).unwrap_or_default(), "artist": name, "album": "", "dur": 0, "thumb": thumb(r)}));
+                    }
+                } else if let Some(r) = m.get("musicTwoRowItemRenderer") {
+                    let bid = r["navigationEndpoint"]["browseEndpoint"]["browseId"].as_str().unwrap_or("");
+                    if bid.starts_with("MPRE") {
+                        let sub: String = r["subtitle"]["runs"].as_array().map(|a| a.iter().filter_map(|x| x["text"].as_str()).collect::<Vec<_>>().concat()).unwrap_or_default();
+                        let t = r["thumbnailRenderer"]["musicThumbnailRenderer"]["thumbnail"]["thumbnails"].as_array().and_then(|a| a.last()).and_then(|t| t["url"].as_str()).unwrap_or("");
+                        albums.push(json!({"browseId": bid, "title": r["title"]["runs"][0]["text"].as_str().unwrap_or(""), "sub": sub, "thumb": t}));
+                    }
+                } else {
+                    m.values().for_each(|c| walk(c, name, songs, albums));
+                }
+            }
+            Value::Array(a) => a.iter().for_each(|c| walk(c, name, songs, albums)),
+            _ => {}
+        }
+    }
+    walk(&resp["contents"], &title, &mut songs, &mut albums);
+    if songs.is_empty() && albums.is_empty() {
+        return Err("Could not open that artist".into());
+    }
+    songs.truncate(25);
+    albums.truncate(20);
+    Ok(json!({"name": title, "desc": desc, "thumb": pic, "songs": songs, "albums": albums}))
+}
+
+/// Search suggestions for what is being typed.
+pub fn suggest(q: &str) -> Vec<String> {
+    let Ok(resp) = post("music/get_search_suggestions", json!({"context": ctx(), "input": q})) else { return vec![] };
+    let mut out = Vec::new();
+    if let Some(sections) = resp["contents"].as_array() {
+        for s in sections {
+            for it in s["searchSuggestionsSectionRenderer"]["contents"].as_array().into_iter().flatten() {
+                let runs = it["searchSuggestionRenderer"]["suggestion"]["runs"].as_array();
+                if let Some(r) = runs {
+                    let t: String = r.iter().filter_map(|x| x["text"].as_str()).collect::<Vec<_>>().concat();
+                    if !t.is_empty() && !out.contains(&t) {
+                        out.push(t);
+                    }
+                }
+            }
+        }
+    }
+    out.truncate(6);
+    out
+}
+
 // ---- Spotify (optional, with your own developer keys) ----
 
 fn spotify_token(id: &str, secret: &str) -> Result<String, String> {

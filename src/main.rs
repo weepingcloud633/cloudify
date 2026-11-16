@@ -4,8 +4,11 @@
 mod audio;
 mod backend;
 mod decoder;
+mod discord;
 mod download;
 mod eq;
+mod fullscreen;
+mod fx;
 mod exportify;
 mod hotkeys;
 mod lyrics;
@@ -18,6 +21,10 @@ mod profiles;
 mod spectrum;
 mod settings;
 mod stream;
+mod smtc;
+mod startup;
+mod stats;
+mod tray;
 mod update;
 mod ytdlp;
 mod ytm;
@@ -79,10 +86,13 @@ fn main() {
         Some("opengl") => set_qt_env("QSG_RHI_BACKEND", "opengl"),
         _ => {}
     }
+    let t0 = std::time::Instant::now();
     let mut app = QGuiApplication::new();
+    paths::log(&format!("startup: Qt application {} ms", t0.elapsed().as_millis()));
     let mut engine = QQmlApplicationEngine::new();
     if let Some(engine) = engine.as_mut() {
         engine.load(&QUrl::from("qrc:/qt/qml/CloudMusic/qml/Main.qml"));
+        paths::log(&format!("startup: QML loaded {} ms", t0.elapsed().as_millis()));
     }
     if let Some(app) = app.as_mut() {
         app.exec();

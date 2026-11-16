@@ -1,4 +1,4 @@
-import QtQuick
+﻿import QtQuick
 import QtQuick.Controls.Basic
 
 // Search: browse-by-genre tiles when empty; songs, albums, artists (and Spotify) for a query.
@@ -14,7 +14,9 @@ Flickable {
     boundsBehavior: Flickable.StopAtBounds
     ScrollBar.vertical: ScrollBar { contentItem: Rectangle { implicitWidth: 6; radius: 3; color: Theme.outline; opacity: 0.6 } }
 
-    function run(q) { query = q; sf.text = q; if (q !== "") app.searchAll(q) }
+    property string filter: "all"        // all | songs | albums | artists
+    function run(q) { query = q; sf.text = q; filter = "all"; r.app.suggestions = []; if (q !== "") { app.rememberSearch(q); app.searchAll(q) } }
+    Timer { id: sugg; interval: 220; onTriggered: if (sf.text.trim().length >= 2) r.app.api.suggest(sf.text.trim()) }
 
     component Heading: Row {
         property string label
@@ -35,7 +37,7 @@ Flickable {
         TextField {
             id: sf
             width: parent.width; height: 56
-            placeholderText: "Search songs, albums, artists…"
+            placeholderText: Tr.t("Search songs, albums, artists…")
             color: Theme.fg; placeholderTextColor: Theme.fgVariant
             font.family: Theme.bodyFont; font.pixelSize: 17; leftPadding: 54; rightPadding: 54
             background: Rectangle {
@@ -47,29 +49,93 @@ Flickable {
                     MouseArea { anchors.fill: parent; anchors.margins: -8; cursorShape: Qt.PointingHandCursor; onClicked: { sf.text = ""; r.query = ""; r.app.found = null } } }
             }
             onAccepted: { var t = text.trim(); if (t.length) r.run(t) }
+            onTextEdited: { if (text.trim().length >= 2) sugg.restart(); else r.app.suggestions = [] }
+        }
+
+        Item {
+            width: parent.width; height: 0; z: 20
+            Rectangle {
+                visible: sf.activeFocus && r.app.suggestions.length > 0 && r.app.suggestionsFor === sf.text.trim() && !r.hasResults
+                y: -16; width: parent.width; height: sgCol.height + 12; radius: 24; color: Theme.containerHighest
+                Column {
+                    id: sgCol; y: 6; width: parent.width
+                    Repeater {
+                        model: r.app.suggestions
+                        delegate: Item {
+                            required property string modelData
+                            width: sgCol.width; height: 44
+                            Rectangle { anchors.fill: parent; anchors.margins: 4; radius: 18; color: Theme.fg; opacity: sma.containsMouse ? 0.08 : 0 }
+                            Text { x: 22; anchors.verticalCenter: parent.verticalCenter; text: "search"; color: Theme.fgVariant; font.family: Theme.iconFont; renderType: Text.NativeRendering; font.pixelSize: 20 }
+                            Text { x: 56; width: parent.width - 80; anchors.verticalCenter: parent.verticalCenter; text: modelData; elide: Text.ElideRight; color: Theme.fg; font.family: Theme.bodyFont; font.pixelSize: 15 }
+                            MouseArea { id: sma; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: r.run(modelData) }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---- recent searches ----
+        Column {
+            visible: !r.hasResults && r.app.settings.searchHistory && r.app.settings.searchHistory.length > 0
+            width: parent.width; spacing: 10
+            Text { text: Tr.t("Recent searches"); color: Theme.fgVariant; font.family: Theme.bodyFont; font.pixelSize: 14; font.weight: Font.DemiBold }
+            Flow {
+                width: parent.width; spacing: 8
+                Repeater {
+                    model: r.app.settings.searchHistory || []
+                    delegate: Item {
+                        required property string modelData
+                        width: hl.implicitWidth + 56; height: 36
+                        Rectangle { anchors.fill: parent; radius: 18; color: hma.containsMouse ? Theme.secondaryContainer : Theme.container; Behavior on color { ColorAnimation { duration: Theme.quick } } }
+                        Text { x: 14; anchors.verticalCenter: parent.verticalCenter; text: "history"; color: Theme.fgVariant; font.family: Theme.iconFont; renderType: Text.NativeRendering; font.pixelSize: 16 }
+                        Text { id: hl; x: 38; anchors.verticalCenter: parent.verticalCenter; text: modelData; color: Theme.fg; font.family: Theme.bodyFont; font.pixelSize: 14 }
+                        MouseArea { id: hma; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: r.run(modelData) }
+                        Text { anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; text: "close"; color: Theme.fgVariant; font.family: Theme.iconFont; renderType: Text.NativeRendering; font.pixelSize: 16
+                            MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; onClicked: r.app.forgetSearch(modelData) } }
+                    }
+                }
+            }
+        }
+
+        // ---- filter chips ----
+        Row {
+            visible: r.hasResults
+            spacing: 8
+            Repeater {
+                model: [{k: "all", t: Tr.t("All")}, {k: "songs", t: Tr.t("Songs")}, {k: "albums", t: Tr.t("Albums")}, {k: "artists", t: Tr.t("Artists")}]
+                delegate: Item {
+                    required property var modelData
+                    width: cl.implicitWidth + 34; height: 36
+                    scale: cma.pressed ? 0.97 : 1
+                    Behavior on scale { NumberAnimation { duration: Theme.quick } }
+                    Rectangle { anchors.fill: parent; radius: 18; color: r.filter === modelData.k ? Theme.primary : (cma.containsMouse ? Theme.secondaryContainer : Theme.container); Behavior on color { ColorAnimation { duration: Theme.quick } } }
+                    Text { id: cl; anchors.centerIn: parent; text: modelData.t; color: r.filter === modelData.k ? Theme.fgPrimary : Theme.fg; font.family: Theme.bodyFont; font.pixelSize: 14; font.weight: Font.DemiBold }
+                    MouseArea { id: cma; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: r.filter = modelData.k }
+                }
+            }
         }
 
         // ---- browse genres ----
         Column {
             visible: !r.hasResults
             width: parent.width; spacing: 16
-            Text { text: "Browse categories"; color: Theme.fg; font.family: Theme.headFont; font.pixelSize: 28; font.weight: Font.Bold }
+            Text { text: Tr.t("Browse categories"); color: Theme.fg; font.family: Theme.headFont; font.pixelSize: 28; font.weight: Font.Bold }
             Flow {
                 width: parent.width; spacing: 14
                 Repeater {
                     model: [
-                        {n: "Pop", q: "pop hits", i: "music_note", a: "#ff4d6d", b: "#ffa63d"},
-                        {n: "Hip-Hop", q: "hip hop hits", i: "headphones", a: "#6a5cf2", b: "#c777f2"},
-                        {n: "Electronic", q: "electronic dance", i: "graphic_eq", a: "#5ecbf7", b: "#4bd67a"},
-                        {n: "Rock", q: "rock classics", i: "electric_bolt", a: "#d9423c", b: "#f08a3c"},
+                        {n: Tr.t("Pop"), q: "pop hits", i: "music_note", a: "#ff4d6d", b: "#ffa63d"},
+                        {n: Tr.t("Hip-Hop"), q: "hip hop hits", i: "headphones", a: "#6a5cf2", b: "#c777f2"},
+                        {n: Tr.t("Electronic"), q: "electronic dance", i: "graphic_eq", a: "#5ecbf7", b: "#4bd67a"},
+                        {n: Tr.t("Rock"), q: "rock classics", i: "electric_bolt", a: "#d9423c", b: "#f08a3c"},
                         {n: "R&B", q: "r&b soul", i: "mic", a: "#ff4a2e", b: "#ffa23d"},
-                        {n: "Indie", q: "indie", i: "auto_awesome", a: "#5eeadb", b: "#3cc4e3"},
-                        {n: "Latin", q: "latin hits", i: "local_fire_department", a: "#ff7a3d", b: "#f2c23d"},
-                        {n: "Chill", q: "chill lofi", i: "spa", a: "#3cc4e3", b: "#3d8bff"},
-                        {n: "Dance", q: "dance party", i: "bolt", a: "#2f7bff", b: "#7a7af0"},
-                        {n: "Jazz", q: "jazz", i: "piano", a: "#8f5cf2", b: "#e0518f"},
-                        {n: "Classical", q: "classical music", i: "library_music", a: "#46b58a", b: "#2f8fd9"},
-                        {n: "Workout", q: "workout motivation", i: "fitness_center", a: "#e0412e", b: "#f2913d"}
+                        {n: Tr.t("Indie"), q: "indie", i: "auto_awesome", a: "#5eeadb", b: "#3cc4e3"},
+                        {n: Tr.t("Latin"), q: "latin hits", i: "local_fire_department", a: "#ff7a3d", b: "#f2c23d"},
+                        {n: Tr.t("Chill"), q: "chill lofi", i: "spa", a: "#3cc4e3", b: "#3d8bff"},
+                        {n: Tr.t("Dance"), q: "dance party", i: "bolt", a: "#2f7bff", b: "#7a7af0"},
+                        {n: Tr.t("Jazz"), q: "jazz", i: "piano", a: "#8f5cf2", b: "#e0518f"},
+                        {n: Tr.t("Classical"), q: "classical music", i: "library_music", a: "#46b58a", b: "#2f8fd9"},
+                        {n: Tr.t("Workout"), q: "workout motivation", i: "fitness_center", a: "#e0412e", b: "#f2913d"}
                     ]
                     delegate: Item {
                         id: tile
@@ -90,22 +156,22 @@ Flickable {
         }
 
         // ---- results ----
-        Text { visible: r.hasResults && r.app.searching; text: "Searching…"; color: Theme.fgVariant; font.family: Theme.bodyFont; font.pixelSize: 15 }
+        Text { visible: r.hasResults && r.app.searching; text: Tr.t("Searching…"); color: Theme.fgVariant; font.family: Theme.bodyFont; font.pixelSize: 15 }
 
         Column {
-            visible: r.hasResults && r.app.found !== null && r.app.found.songs.length > 0
+            visible: r.hasResults && (r.filter === "all" || r.filter === "songs") && r.app.found !== null && r.app.found.songs.length > 0
             width: parent.width; spacing: 8
-            Heading { label: "Songs"; iconName: "music_note" }
+            Heading { label: Tr.t("Songs"); iconName: "music_note" }
             Repeater {
-                model: r.app.found ? r.app.found.songs.slice(0, 7) : []
+                model: r.app.found ? r.app.found.songs.slice(0, r.filter === "songs" ? 25 : 7) : []
                 delegate: SongRow { required property var modelData; required property int index; width: col.width; app: r.app; song: modelData; list: r.app.found.songs; idx: index }
             }
         }
 
         Column {
-            visible: r.hasResults && r.app.found !== null && r.app.found.albums.length > 0
+            visible: r.hasResults && (r.filter === "all" || r.filter === "albums") && r.app.found !== null && r.app.found.albums.length > 0
             width: parent.width; spacing: 12
-            Heading { label: "Albums"; iconName: "album" }
+            Heading { label: Tr.t("Albums"); iconName: "album" }
             ListView {
                 width: parent.width; height: 232; orientation: ListView.Horizontal; spacing: 16; clip: true
                 boundsBehavior: Flickable.StopAtBounds
@@ -125,9 +191,9 @@ Flickable {
         }
 
         Column {
-            visible: r.hasResults && r.app.found !== null && r.app.found.artists.length > 0
+            visible: r.hasResults && (r.filter === "all" || r.filter === "artists") && r.app.found !== null && r.app.found.artists.length > 0
             width: parent.width; spacing: 12
-            Heading { label: "Artists"; iconName: "person" }
+            Heading { label: Tr.t("Artists"); iconName: "person" }
             ListView {
                 width: parent.width; height: 200; orientation: ListView.Horizontal; spacing: 20; clip: true
                 boundsBehavior: Flickable.StopAtBounds
@@ -140,7 +206,7 @@ Flickable {
                     Behavior on scale { NumberAnimation { duration: Theme.quick } }
                     Cover { width: 140; height: 140; radius: 70; source: ar.modelData.thumb }
                     Text { y: 150; width: parent.width; text: ar.modelData.title; horizontalAlignment: Text.AlignHCenter; color: Theme.fg; font.family: Theme.bodyFont; font.pixelSize: 15; font.weight: Font.DemiBold; elide: Text.ElideRight }
-                    MouseArea { id: arma; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: r.run(ar.modelData.title) }
+                    MouseArea { id: arma; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: r.app.openArtist(ar.modelData) }
                 }
             }
         }
@@ -148,7 +214,7 @@ Flickable {
         Column {
             visible: r.hasResults && r.app.found !== null && r.app.found.spotify !== undefined && r.app.found.spotify.length > 0
             width: parent.width; spacing: 8
-            Heading { label: "On Spotify"; iconName: "graphic_eq" }
+            Heading { label: Tr.t("On Spotify"); iconName: "graphic_eq" }
             Repeater {
                 model: r.app.found && r.app.found.spotify ? r.app.found.spotify.slice(0, 6) : []
                 delegate: SongRow { required property var modelData; width: col.width; app: r.app; song: modelData; spotify: true }
@@ -156,12 +222,12 @@ Flickable {
         }
         Text {
             visible: r.hasResults && r.app.found !== null && r.app.found.spotifyError !== undefined
-            text: r.app.found && r.app.found.spotifyError ? "Spotify: " + r.app.found.spotifyError : ""
+            text: r.app.found && r.app.found.spotifyError ? Tr.t("Spotify: ") + r.app.found.spotifyError : ""
             color: Theme.error; font.family: Theme.bodyFont; font.pixelSize: 13
         }
         Text {
             visible: r.hasResults && !r.app.searching && r.app.found !== null && r.app.found.songs.length === 0 && r.app.found.albums.length === 0
-            text: "Nothing found for “" + r.query + "”"; color: Theme.fgVariant; font.family: Theme.bodyFont; font.pixelSize: 16
+            text: Tr.t("Nothing found for “") + r.query + "”"; color: Theme.fgVariant; font.family: Theme.bodyFont; font.pixelSize: 16
         }
     }
 }

@@ -1,4 +1,4 @@
-import QtQuick
+﻿import QtQuick
 import QtQuick.Dialogs
 
 // Native file pickers, loaded only when the user asks for one.
@@ -15,7 +15,7 @@ Item {
 
     FileDialog {
         id: openDialog
-        nameFilters: ["Playlists (*.csv *.txt *.cloud *.silva *.json)", "All files (*)"]
+        nameFilters: ["Playlists (*.csv *.txt *.cloud *.json)", "All files (*)"]
         onAccepted: f.importPicked(selectedFile.toString())
     }
     FileDialog {

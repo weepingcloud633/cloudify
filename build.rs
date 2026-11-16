@@ -4,12 +4,13 @@ fn main() {
     embed_resource::compile("assets/app.rc", embed_resource::NONE);
     let files: Vec<QmlFile> = [
         "Main", "HomeView", "TracksPage", "TrackList", "PlayerBar", "ImmersivePlayer", "WavyButton", "WaveSeek",
-        "Squiggle", "Cover", "PlaylistArt", "LiquidBackdrop", "IconButton", "PillButton", "NavItem", "ProfileGate", "SettingsView", "AudioEngine", "FileDialogs", "TitleBar", "SearchView", "SongRow",
+        "Squiggle", "Cover", "PlaylistArt", "StatsView", "LiquidBackdrop", "IconButton", "PillButton", "NavItem", "ProfileGate", "SettingsView", "AudioEngine", "FileDialogs", "TitleBar", "SearchView", "SongRow",
     ]
     .iter()
     .map(|n| QmlFile::from(format!("qml/{n}.qml")))
     .chain(std::iter::once(QmlFile::from("qml/Theme.qml").singleton(true)))
     .chain(std::iter::once(QmlFile::from("qml/Themes.qml").singleton(true)))
+    .chain(std::iter::once(QmlFile::from("qml/Tr.qml").singleton(true)))
     .collect();
 
     println!("cargo:rerun-if-changed=shaders.qrc");

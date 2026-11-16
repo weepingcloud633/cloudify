@@ -10,7 +10,7 @@ fn file() -> std::path::PathBuf {
 }
 
 fn defaults() -> Value {
-    json!({"quality": "high", "dynamicColor": true, "reduceMotion": false, "autoRadio": true, "cacheLimitMB": 2048, "volume": 0.8, "graphics": "auto", "themeMode": "dark", "accent": "", "spotifyId": "", "spotifySecret": "", "themeId": "", "recent": [], "eq": [0, 0, 0, 0, 0, 0], "eqPreset": "Flat", "localFolders": [], "autoUpdate": true})
+    json!({"quality": "high", "dynamicColor": true, "reduceMotion": false, "autoRadio": true, "cacheLimitMB": 2048, "volume": 0.8, "graphics": "auto", "themeMode": "dark", "accent": "", "spotifyId": "", "spotifySecret": "", "themeId": "", "recent": [], "eq": [0, 0, 0, 0, 0, 0], "eqPreset": "Flat", "localFolders": [], "autoUpdate": true, "closeToTray": true, "autostart": false, "speed": 1.0, "pitch": 0, "normalize": false, "crossfade": 0, "preamp": 0, "outputDevice": "", "eqCustom": [], "offline": false, "discordAppId": "", "discordPresence": false, "searchHistory": [], "language": "auto"})
 }
 
 fn load() -> Value {
@@ -65,6 +65,28 @@ pub fn patch(p: &Value) -> Value {
     }
     if cur["eqPreset"].as_str().is_some_and(|n| n.len() > 40) {
         cur["eqPreset"] = json!("Flat");
+    }
+    let sp = cur["speed"].as_f64().unwrap_or(1.0).clamp(0.5, 2.0);
+    cur["speed"] = json!(sp);
+    cur["pitch"] = json!(cur["pitch"].as_f64().unwrap_or(0.0).clamp(-12.0, 12.0).round());
+    cur["crossfade"] = json!(cur["crossfade"].as_f64().unwrap_or(0.0).clamp(0.0, 12.0).round());
+    cur["preamp"] = json!(cur["preamp"].as_f64().unwrap_or(0.0).clamp(-12.0, 12.0));
+    if cur["outputDevice"].as_str().is_some_and(|n| n.len() > 200) {
+        cur["outputDevice"] = json!("");
+    }
+    if let Some(a) = cur["searchHistory"].as_array_mut() {
+        a.retain(|x| x.as_str().is_some_and(|s| !s.is_empty() && s.len() < 120));
+        a.truncate(12);
+    }
+    if !["auto", "en", "es", "fr", "de", "pt", "ru", "ar"].contains(&cur["language"].as_str().unwrap_or("")) {
+        cur["language"] = json!("auto");
+    }
+    let did = cur["discordAppId"].as_str().unwrap_or("").to_string();
+    if !did.bytes().all(|b| b.is_ascii_digit()) || did.len() > 24 {
+        cur["discordAppId"] = json!("");
+    }
+    if let Some(a) = cur["eqCustom"].as_array_mut() {
+        a.truncate(30);
     }
     if let Some(a) = cur["localFolders"].as_array_mut() {
         a.retain(|f| f.as_str().is_some_and(|s| !s.is_empty() && s.len() < 400));

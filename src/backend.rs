@@ -38,6 +38,63 @@ pub mod qobject {
         #[cxx_name = "deletePlaylist"]
         fn delete_playlist(self: &Backend, id: &QString);
         #[qinvokable]
+        #[cxx_name = "audioPreload"]
+        fn audio_preload(self: &Backend, vid: &QString);
+        #[qinvokable]
+        #[cxx_name = "setFx"]
+        fn set_fx(self: &Backend, json: &QString);
+        #[qinvokable]
+        #[cxx_name = "audioDevices"]
+        fn audio_devices(self: &Backend) -> QString;
+        #[qinvokable]
+        #[cxx_name = "audioDevice"]
+        fn audio_device(self: &Backend, name: &QString);
+        #[qinvokable]
+        #[cxx_name = "artistPage"]
+        fn artist_page(self: Pin<&mut Backend>, browse_id: &QString, name: &QString, thumb: &QString);
+        #[qsignal]
+        #[cxx_name = "artistReady"]
+        fn artist_ready(self: Pin<&mut Backend>, json: QString);
+        #[qinvokable]
+        fn suggest(self: Pin<&mut Backend>, query: &QString);
+        #[qsignal]
+        #[cxx_name = "suggestionsReady"]
+        fn suggestions_ready(self: Pin<&mut Backend>, query: QString, json: QString);
+        #[qinvokable]
+        #[cxx_name = "logPlay"]
+        fn log_play(self: &Backend, track: &QString, secs: i32);
+        #[qinvokable]
+        fn stats(self: &Backend) -> QString;
+        #[qinvokable]
+        #[cxx_name = "cachedIds"]
+        fn cached_ids(self: &Backend) -> QString;
+        #[qinvokable]
+        #[cxx_name = "discordUpdate"]
+        fn discord_update(self: &Backend, title: &QString, artist: &QString, position_ms: i32, duration_ms: i32, playing: bool);
+        #[qinvokable]
+        #[cxx_name = "startMediaOverlay"]
+        fn start_media_overlay(self: Pin<&mut Backend>);
+        #[qinvokable]
+        #[cxx_name = "overlayUpdate"]
+        fn overlay_update(self: &Backend, title: &QString, artist: &QString, thumb: &QString, playing: bool);
+        #[qinvokable]
+        fn languages(self: &Backend) -> QString;
+        #[qinvokable]
+        #[cxx_name = "setFullscreen"]
+        fn set_fullscreen(self: &Backend, on: bool) -> bool;
+        #[qinvokable]
+        #[cxx_name = "startTray"]
+        fn start_tray(self: Pin<&mut Backend>);
+        #[qinvokable]
+        #[cxx_name = "trayTip"]
+        fn tray_tip(self: &Backend, text: &QString);
+        #[qinvokable]
+        #[cxx_name = "setAutostart"]
+        fn set_autostart(self: &Backend, on: bool) -> bool;
+        #[qinvokable]
+        #[cxx_name = "autostartOn"]
+        fn autostart_on(self: &Backend) -> bool;
+        #[qinvokable]
         #[cxx_name = "checkUpdate"]
         fn check_update(self: Pin<&mut Backend>);
         #[qsignal]
@@ -73,6 +130,12 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "setEq"]
         fn set_eq(self: &Backend, gains: &QString);
+        #[qinvokable]
+        #[cxx_name = "setFlag"]
+        fn set_flag(self: &Backend, kind: &QString, id: &QString, on: bool);
+        #[qinvokable]
+        #[cxx_name = "hideInPlaylist"]
+        fn hide_in_playlist(self: &Backend, playlist: &QString, song: &QString, on: bool);
         #[qinvokable]
         #[cxx_name = "removeFromPlaylist"]
         fn remove_from_playlist(self: &Backend, id: &QString, song: &QString);
@@ -278,6 +341,25 @@ fn q(s: &str) -> QString {
 
 fn parse(s: &QString) -> Value {
     serde_json::from_str(&s.to_string()).unwrap_or(Value::Null)
+}
+
+/// The handle of this app's visible top-level window (0 before it exists).
+pub fn main_hwnd() -> isize {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{EnumWindows, GetWindowThreadProcessId, IsWindowVisible};
+    unsafe extern "system" fn each(hwnd: windows_sys::Win32::Foundation::HWND, out: isize) -> i32 {
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(hwnd, &mut pid);
+        if pid == std::process::id() && IsWindowVisible(hwnd) != 0 {
+            *(out as *mut isize) = hwnd as isize;
+            return 0;
+        }
+        1
+    }
+    let mut found: isize = 0;
+    unsafe {
+        EnumWindows(Some(each), &mut found as *mut isize as isize);
+    }
+    found
 }
 
 static INSTALLER: Mutex<Option<std::path::PathBuf>> = Mutex::new(None);
@@ -699,6 +781,128 @@ impl qobject::Backend {
         library::add_to_playlist(&id.to_string(), &parse(track));
     }
 
+    pub fn audio_preload(&self, vid: &QString) {
+        crate::audio::preload(&vid.to_string());
+    }
+
+    /// `{speed, pitch, normalize, crossfade, preamp}`
+    pub fn set_fx(&self, json: &QString) {
+        let v = parse(json);
+        crate::fx::set_speed(v["speed"].as_f64().unwrap_or(1.0) as f32);
+        crate::fx::set_pitch(v["pitch"].as_f64().unwrap_or(0.0) as f32);
+        crate::fx::set_normalize(v["normalize"].as_bool().unwrap_or(false));
+        crate::audio::set_crossfade(v["crossfade"].as_f64().unwrap_or(0.0) as f32);
+        crate::eq::set_preamp(v["preamp"].as_f64().unwrap_or(0.0) as f32);
+    }
+
+    pub fn audio_devices(&self) -> QString {
+        q(&json!(crate::audio::devices()).to_string())
+    }
+
+    pub fn audio_device(&self, name: &QString) {
+        crate::audio::device(&name.to_string());
+    }
+
+    pub fn artist_page(self: Pin<&mut Self>, browse_id: &QString, name: &QString, thumb: &QString) {
+        let (id, n, t) = (browse_id.to_string(), name.to_string(), thumb.to_string());
+        let qt = self.qt_thread();
+        std::thread::spawn(move || {
+            let out = match crate::ytm_more::artist_page(&id, &n, &t) {
+                Ok(v) => json!({"ok": true, "artist": v}),
+                Err(e) => json!({"ok": false, "error": e}),
+            };
+            let _ = qt.queue(move |mut b| b.as_mut().artist_ready(q(&out.to_string())));
+        });
+    }
+
+    pub fn suggest(self: Pin<&mut Self>, query: &QString) {
+        let query = query.to_string();
+        let qt = self.qt_thread();
+        std::thread::spawn(move || {
+            let list = crate::ytm_more::suggest(&query);
+            let _ = qt.queue(move |mut b| b.as_mut().suggestions_ready(q(&query), q(&json!(list).to_string())));
+        });
+    }
+
+    pub fn log_play(&self, track: &QString, secs: i32) {
+        crate::stats::log_play(&parse(track), secs.max(0) as u64);
+    }
+
+    pub fn stats(&self) -> QString {
+        q(&crate::stats::summary().to_string())
+    }
+
+    pub fn cached_ids(&self) -> QString {
+        q(&json!(stream::cached_ids()).to_string())
+    }
+
+    /// Show what is playing on Discord. Needs the user's own Discord Application ID.
+    pub fn discord_update(&self, title: &QString, artist: &QString, position_ms: i32, duration_ms: i32, playing: bool) {
+        let st = crate::settings::get();
+        let id = st["discordAppId"].as_str().unwrap_or("").to_string();
+        let on = st["discordPresence"].as_bool().unwrap_or(false) && !id.is_empty();
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        let start = now.saturating_sub((position_ms.max(0) / 1000) as u64);
+        crate::discord::update(crate::discord::Presence {
+            app_id: if on { id } else { String::new() },
+            title: title.to_string(),
+            artist: artist.to_string(),
+            start_unix: if playing { start } else { 0 },
+            end_unix: if playing && duration_ms > 0 { start + (duration_ms / 1000) as u64 } else { 0 },
+            clear: !playing || title.is_empty(),
+        });
+    }
+
+    pub fn start_media_overlay(self: Pin<&mut Self>) {
+        let qt = self.qt_thread();
+        let hwnd = main_hwnd();
+        if hwnd == 0 {
+            crate::paths::log("media overlay: no window yet");
+            return;
+        }
+        match crate::smtc::start(hwnd, move |action| {
+            let qt = qt.clone();
+            let _ = qt.queue(move |mut b| b.as_mut().hotkey(q(action)));
+        }) {
+            Ok(()) => crate::paths::log("media overlay: ready"),
+            Err(e) => crate::paths::log(&format!("media overlay: {e}")),
+        }
+    }
+
+    pub fn overlay_update(&self, title: &QString, artist: &QString, thumb: &QString, playing: bool) {
+        crate::smtc::update(&title.to_string(), &artist.to_string(), &thumb.to_string(), playing);
+    }
+
+    /// The interface translations (langs/tables.json), compiled in.
+    pub fn languages(&self) -> QString {
+        q(include_str!("../langs/tables.json"))
+    }
+
+    /// Real fullscreen: no frame, no rounded corners, over the whole monitor and above the taskbar.
+    pub fn set_fullscreen(&self, on: bool) -> bool {
+        crate::fullscreen::set(main_hwnd(), on)
+    }
+
+    pub fn start_tray(self: Pin<&mut Self>) {
+        let qt = self.qt_thread();
+        crate::tray::start(move |action| {
+            let qt = qt.clone();
+            let _ = qt.queue(move |mut b| b.as_mut().hotkey(q(action)));
+        });
+    }
+
+    pub fn tray_tip(&self, text: &QString) {
+        crate::tray::set_tip(&text.to_string());
+    }
+
+    pub fn set_autostart(&self, on: bool) -> bool {
+        crate::startup::set(on)
+    }
+
+    pub fn autostart_on(&self) -> bool {
+        crate::startup::enabled()
+    }
+
     pub fn check_update(self: Pin<&mut Self>) {
         let qt = self.qt_thread();
         std::thread::spawn(move || {
@@ -772,6 +976,14 @@ impl qobject::Backend {
         }
     }
 
+    pub fn set_flag(&self, kind: &QString, id: &QString, on: bool) {
+        library::set_flag(&kind.to_string(), &id.to_string(), on);
+    }
+
+    pub fn hide_in_playlist(&self, playlist: &QString, song: &QString, on: bool) {
+        library::hide_in_playlist(&playlist.to_string(), &song.to_string(), on);
+    }
+
     pub fn remove_from_playlist(&self, id: &QString, song: &QString) {
         library::remove_from_playlist(&id.to_string(), &song.to_string());
     }
@@ -798,7 +1010,7 @@ impl qobject::Backend {
         let name = std::path::Path::new(&path).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
         match std::fs::read_to_string(&path) {
             Ok(text) => {
-                // A Cloud Music / Silva Music share file is JSON; anything else is a song list.
+                // A Cloudify share file is JSON; anything else is a song list.
                 if let Ok(obj) = library::decode(&text) {
                     let res = library::import_payload(&obj);
                     let out = match res {

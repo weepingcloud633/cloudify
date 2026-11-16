@@ -11,6 +11,13 @@ const MAX_DB: f32 = 12.0;
 
 static GAINS: [AtomicU32; BANDS] = [const { AtomicU32::new(0) }; BANDS];
 static GEN: AtomicU32 = AtomicU32::new(1);
+static PRE: AtomicU32 = AtomicU32::new(0); // preamp in dB, as f32 bits
+
+/// Overall gain before the bands, in dB (plus or minus 12).
+pub fn set_preamp(db: f32) {
+    PRE.store(if db.is_finite() { db.clamp(-12.0, 12.0) } else { 0.0 }.to_bits(), Ordering::Relaxed);
+    GEN.fetch_add(1, Ordering::Release);
+}
 
 /// Set the six gains in dB (clamped to plus or minus 12); the playing track follows at once.
 pub fn set(gains: &[f32]) {
@@ -61,13 +68,14 @@ impl<S: Source<Item = f32>> Eq<S> {
     fn refresh(&mut self) {
         self.seen = GEN.load(Ordering::Acquire);
         let g = gains();
-        self.active = g.iter().any(|x| x.abs() > 0.01);
+        let pre = f32::from_bits(PRE.load(Ordering::Relaxed));
+        self.active = pre.abs() > 0.01 || g.iter().any(|x| x.abs() > 0.01);
         for i in 0..BANDS {
             self.coef[i] = peaking(FREQ[i], self.rate, g[i]);
         }
         // leave room for the boost so loud tracks do not clip
         let top = g.iter().cloned().fold(0.0f32, f32::max);
-        self.headroom = 10f32.powf(-top * 0.6 / 20.0);
+        self.headroom = 10f32.powf((pre - top * 0.6) / 20.0);
     }
 }
 
