@@ -8,6 +8,8 @@ Item {
     property int size: 40
     property int iconSize: 24
     property string fontFamily: Theme.iconFont
+    // the clickable (and hover) disc hugs the icon, so a click beside a button does not trigger it
+    readonly property int hit: Math.min(size, iconSize + 10)
     signal clicked()
 
     width: size
@@ -16,7 +18,8 @@ Item {
     Behavior on scale { NumberAnimation { duration: Theme.quick; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } }
 
     Rectangle {
-        anchors.fill: parent
+        anchors.centerIn: parent
+        width: r.hit; height: r.hit
         radius: width / 2
         color: Theme.fg
         opacity: ma.pressed ? 0.14 : (ma.containsMouse ? 0.08 : 0)
@@ -30,5 +33,5 @@ Item {
         font.pixelSize: r.iconSize
         Behavior on color { ColorAnimation { duration: Theme.quick } }
     }
-    MouseArea { id: ma; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: r.clicked() }
+    MouseArea { id: ma; anchors.centerIn: parent; width: r.hit; height: r.hit; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: r.clicked() }
 }
