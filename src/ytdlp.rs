@@ -147,8 +147,8 @@ pub fn playlist(url: &str) -> Result<(String, Vec<Value>), String> {
 /// Ask yt-dlp for the best direct audio stream of a video.
 pub fn resolve(vid: &str) -> Result<Resolved, String> {
     let exe = ensure()?;
-    let out = Command::new(exe)
-        .args([
+    let mut out = Command::new(exe);
+    out.args([
             "-j",
             "--no-playlist",
             "--no-warnings",
@@ -164,8 +164,9 @@ pub fn resolve(vid: &str) -> Result<Resolved, String> {
             &format!("https://music.youtube.com/watch?v={vid}"),
         ])
         .creation_flags(NO_WINDOW)
-        .output()
-        .map_err(|e| e.to_string())?;
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+    let out = run_limited(out, 60)?;
     if !out.status.success() {
         let err = String::from_utf8_lossy(&out.stderr);
         return Err(nice(err.lines().last().unwrap_or("")));
@@ -202,4 +203,25 @@ fn nice(m: &str) -> String {
     } else {
         "Could not load this track".into()
     }
+}
+
+/// Run a command to the end, but kill it after `secs` so a hung yt-dlp cannot block playback forever.
+fn run_limited(mut c: Command, secs: u64) -> Result<std::process::Output, String> {
+    let mut child = c.spawn().map_err(|e| e.to_string())?;
+    let (mut so, mut se) = (child.stdout.take(), child.stderr.take());
+    let h1 = std::thread::spawn(move || { let mut b = Vec::new(); if let Some(s) = so.as_mut() { let _ = std::io::Read::read_to_end(s, &mut b); } b });
+    let h2 = std::thread::spawn(move || { let mut b = Vec::new(); if let Some(s) = se.as_mut() { let _ = std::io::Read::read_to_end(s, &mut b); } b });
+    let end = std::time::Instant::now() + std::time::Duration::from_secs(secs);
+    let status = loop {
+        if let Some(s) = child.try_wait().map_err(|e| e.to_string())? {
+            break s;
+        }
+        if std::time::Instant::now() > end {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("The song lookup timed out. Try again.".into());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    };
+    Ok(std::process::Output { status, stdout: h1.join().unwrap_or_default(), stderr: h2.join().unwrap_or_default() })
 }

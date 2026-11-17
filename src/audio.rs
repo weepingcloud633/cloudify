@@ -28,6 +28,7 @@ enum Cmd {
     Load(String),
     Preload(String),
     Preloaded(String, Result<Opened, String>),
+    Loaded(u64, String, Result<Opened, String>),
     Play,
     Pause,
     Stop,
@@ -179,6 +180,7 @@ fn run(rx: std::sync::mpsc::Receiver<Cmd>) {
     let mut vol = 0.8f32;
     let mut paused = false;
     let mut reported_end = false;
+    let mut load_gen = 0u64;
     let tx_self = tx().lock().unwrap().clone();
 
     loop {
@@ -206,15 +208,28 @@ fn run(rx: std::sync::mpsc::Receiver<Cmd>) {
                         }
                     }
                 }
-                // the song may already be open as the next one
-                let opened = match next.take() {
-                    Some((v, o)) if v == vid => Ok(o),
+                // opened off this thread: a slow or stuck lookup must not freeze next/previous/pause
+                load_gen += 1;
+                let gen = load_gen;
+                match next.take() {
+                    Some((v, o)) if v == vid => {
+                        let _ = tx_self.send(Cmd::Loaded(gen, vid, Ok(o)));
+                    }
                     other => {
                         next = other;
-                        open(&vid)
+                        let tx2 = tx_self.clone();
+                        std::thread::spawn(move || {
+                            let r = open(&vid);
+                            let _ = tx2.send(Cmd::Loaded(gen, vid, r));
+                        });
                     }
-                };
-                match opened {
+                }
+            }
+            Ok(Cmd::Loaded(gen, vid, res)) => {
+                if gen != load_gen {
+                    continue; // a newer Load or a Stop came in meanwhile
+                }
+                match res {
                     Ok(o) => match Sink::try_new(&out.as_ref().unwrap().1) {
                         Ok(sk) => {
                             sk.set_volume(vol);
@@ -264,6 +279,7 @@ fn run(rx: std::sync::mpsc::Receiver<Cmd>) {
                 }
             }
             Ok(Cmd::Stop) => {
+                load_gen += 1;
                 if let Some(p) = cur.take() {
                     p.sink.stop();
                 }
