@@ -744,6 +744,7 @@ Item {
             }
         }
     }
+    readonly property bool popupOpen: presetMenu.opened || savePopup.opened
     Popup {
         id: presetMenu
         anchors.centerIn: Overlay.overlay

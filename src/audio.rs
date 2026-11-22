@@ -182,6 +182,11 @@ fn run(rx: std::sync::mpsc::Receiver<Cmd>) {
     let mut reported_end = false;
     let mut load_gen = 0u64;
     let tx_self = tx().lock().unwrap().clone();
+    // unplugged / switched output devices: watch the device list, and a sink that stops consuming
+    let mut snap = devices();
+    let mut last_check = Instant::now();
+    let mut last_frames = 0u64;
+    let mut last_move = Instant::now();
 
     loop {
         // wake more often right before a hand-over so a gapless one stays gapless
@@ -317,7 +322,11 @@ fn run(rx: std::sync::mpsc::Receiver<Cmd>) {
                     }
                     queued = None;
                     out = None;
-                    if let Ok(o) = open_output(&dev) {
+                    let opened_out = open_output(&dev);
+                    if let Err(e) = &opened_out {
+                        event(e.clone());
+                    }
+                    if let Ok(o) = opened_out {
                         out = Some(o);
                         if let Ok(o2) = open(&vid) {
                             if let Ok(sk) = Sink::try_new(&out.as_ref().unwrap().1) {
@@ -337,6 +346,30 @@ fn run(rx: std::sync::mpsc::Receiver<Cmd>) {
             }
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => break,
+        }
+
+        // ---- output device watch ----
+        if last_check.elapsed() >= Duration::from_secs(2) {
+            last_check = Instant::now();
+            let list = devices();
+            let gone = !dev.is_empty() && snap.contains(&dev) && !list.contains(&dev);
+            let back = !dev.is_empty() && !snap.contains(&dev) && list.contains(&dev);
+            let new_default = dev.is_empty() && list.first() != snap.first();
+            snap = list;
+            if (gone || back || new_default) && out.is_some() {
+                let _ = tx_self.send(Cmd::Device(dev.clone()));
+            }
+        }
+        if let Some(p) = &cur {
+            let f = p.frames.load(Ordering::Relaxed);
+            if f != last_frames || paused || p.sink.empty() {
+                last_frames = f;
+                last_move = Instant::now();
+            } else if last_move.elapsed() >= Duration::from_secs(4) {
+                // the sink is not consuming audio (device gone without a notice): reopen the output
+                last_move = Instant::now();
+                let _ = tx_self.send(Cmd::Device(dev.clone()));
+            }
         }
 
         // ---- the crossfade in progress ----

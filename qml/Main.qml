@@ -736,13 +736,15 @@ ApplicationWindow {
         }
         sourceComponent: Component { ImmersivePlayer { app: win; onClose: win.immersive = false } }
     }
-    Shortcut { sequence: "Escape"; enabled: win.immersive || win.nativeFull; onActivated: { if (win.nativeFull) win.setFull(false); else win.immersive = false } }
+    readonly property bool popupOpen: songMenu.opened || sleepMenu.opened || addMenu.opened || playlistEditor.opened || dupPopup.opened || deletePopup.opened || plMenu.opened || importPopup.opened || (imm.item !== null && imm.item.popupOpen === true)
+    readonly property bool typing: win.activeFocusItem !== null && win.activeFocusItem.hasOwnProperty("inputMethodHints")
+    Shortcut { sequence: "Escape"; enabled: (win.immersive || win.nativeFull) && !win.popupOpen; onActivated: { if (win.nativeFull) win.setFull(false); else win.immersive = false } }
     Shortcut { sequence: "F11"; onActivated: win.toggleFull() }
-    Shortcut { sequence: "Left"; enabled: win.immersive; onActivated: win.seek(Math.max(0, win.position - 10000)) }
-    Shortcut { sequence: "Right"; enabled: win.immersive; onActivated: win.seek(win.position + 10000) }
-    Shortcut { sequence: "Up"; enabled: win.immersive; onActivated: win.volume = Math.min(1, win.volume + 0.05) }
-    Shortcut { sequence: "Down"; enabled: win.immersive; onActivated: win.volume = Math.max(0, win.volume - 0.05) }
-    Shortcut { sequence: "Space"; enabled: !searchView.searchActive && !edName.activeFocus && !importText.activeFocus; onActivated: win.toggle() }
+    Shortcut { sequence: "Left"; enabled: win.immersive && !win.typing && !win.popupOpen; onActivated: win.seek(Math.max(0, win.position - 10000)) }
+    Shortcut { sequence: "Right"; enabled: win.immersive && !win.typing && !win.popupOpen; onActivated: win.seek(win.position + 10000) }
+    Shortcut { sequence: "Up"; enabled: win.immersive && !win.typing && !win.popupOpen; onActivated: win.volume = Math.min(1, win.volume + 0.05) }
+    Shortcut { sequence: "Down"; enabled: win.immersive && !win.typing && !win.popupOpen; onActivated: win.volume = Math.max(0, win.volume - 0.05) }
+    Shortcut { sequence: "Space"; enabled: !win.typing && !win.popupOpen; onActivated: win.toggle() }
 
     // ---- song actions ----
     Popup {
@@ -805,7 +807,9 @@ ApplicationWindow {
             spacing: 2
             Text { text: Tr.t("Add to playlist"); color: Theme.fg; font.family: Theme.headFont; font.pixelSize: 18; font.weight: Font.Bold; leftPadding: 8; bottomPadding: 8; topPadding: 4 }
             Text { visible: win.lib.playlists.length === 0; text: Tr.t("Create a playlist first (＋ in the sidebar)"); color: Theme.fgVariant; font.family: Theme.bodyFont; leftPadding: 8; bottomPadding: 6 }
-            Repeater {
+            ListView {
+                width: 300; height: Math.min(contentHeight, Math.max(120, win.height - 260)); clip: true
+                boundsBehavior: Flickable.StopAtBounds
                 model: win.lib.playlists
                 delegate: NavItem {
                     required property var modelData

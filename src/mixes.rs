@@ -55,6 +55,35 @@ fn lead_artist(t: &Value) -> String {
     a.split([',', '&']).next().unwrap_or(a).trim().to_string()
 }
 
+
+/// Reorder songs so one artist is never heard twice within `gap` songs and no artist takes more than
+/// `cap` places; the first song stays first. Songs over the cap go to the end instead of being dropped.
+pub fn spread(tracks: Vec<Value>, cap: usize, gap: usize) -> Vec<Value> {
+    let mut rest: Vec<(String, Value)> = tracks.into_iter().map(|t| (lead_artist(&t).to_lowercase(), t)).collect();
+    let mut out: Vec<(String, Value)> = Vec::new();
+    let mut over: Vec<Value> = Vec::new();
+    let mut count: HashMap<String, usize> = HashMap::new();
+    while !rest.is_empty() {
+        let recent: Vec<&String> = out.iter().rev().take(gap).map(|(a, _)| a).collect();
+        // first song whose artist is not in the recent window and is under the cap; else the first under the cap
+        let pick = rest
+            .iter()
+            .position(|(a, _)| a.is_empty() || (!recent.contains(&a) && count.get(a).copied().unwrap_or(0) < cap))
+            .or_else(|| rest.iter().position(|(a, _)| a.is_empty() || count.get(a).copied().unwrap_or(0) < cap));
+        match pick {
+            Some(i) => {
+                let (a, t) = rest.remove(i);
+                *count.entry(a.clone()).or_default() += 1;
+                out.push((a, t));
+            }
+            None => over.extend(rest.drain(..).map(|(_, t)| t)),
+        }
+    }
+    let mut v: Vec<Value> = out.into_iter().map(|(_, t)| t).collect();
+    v.extend(over);
+    v
+}
+
 /// artist -> (weight, their songs the user already has)
 fn taste() -> HashMap<String, (f64, Vec<Value>)> {
     let mut m: HashMap<String, (f64, Vec<Value>)> = HashMap::new();
@@ -186,6 +215,7 @@ pub fn generate(force: bool) -> Result<Value, String> {
             tracks.push(json!({"id": id, "title": t["title"], "artist": t["artist"], "album": t["album"], "dur": t["dur"], "thumb": t["thumb"]}));
         }
         pool.extend(fresh);
+        let tracks = spread(tracks, 4, 3);
         if tracks.is_empty() {
             continue;
         }
@@ -229,6 +259,7 @@ pub fn generate(force: bool) -> Result<Value, String> {
                 .map(|s| json!({"id": s["id"], "title": s["title"], "artist": s["artist"], "album": s["album"], "dur": s["dur"], "thumb": s["thumb"]}))
                 .collect();
             rng.shuffle(&mut d);
+            let mut d = spread(d, 2, 4);
             d.truncate(30);
             if d.len() >= 10 {
                 let _ = std::fs::write(discover_file(), json!({"week": week, "tracks": d}).to_string());
@@ -267,6 +298,18 @@ mod tests {
         a.shuffle(&mut v);
         v.sort();
         assert_eq!(v, (0..20).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn spread_separates_artists_and_keeps_first() {
+        let t = |a: &str, i: u32| json!({"artist": a, "id": i.to_string()});
+        let v = spread(vec![t("A", 1), t("A", 2), t("A", 3), t("B", 4), t("C", 5), t("A", 6), t("B", 7)], 2, 2);
+        assert_eq!(v[0]["id"], "1");
+        assert_eq!(v.len(), 7);
+        for w in v.windows(2).take(4) {
+            assert_ne!(lead_artist(&w[0]), lead_artist(&w[1]));
+        }
+        assert!(v.iter().take(5).filter(|x| lead_artist(x) == "A").count() <= 2);
     }
 
     #[test]

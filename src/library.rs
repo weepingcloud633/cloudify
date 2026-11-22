@@ -17,17 +17,25 @@ fn file() -> std::path::PathBuf {
 
 /// Forget the cached library (after a profile switch).
 pub fn reset() {
-    *LIB.lock().unwrap() = None;
+    *LIB.lock().unwrap_or_else(|e| e.into_inner()) = None;
 }
 
 fn with<R>(f: impl FnOnce(&mut Value) -> R) -> R {
-    let mut g = LIB.lock().unwrap();
+    let mut g = LIB.lock().unwrap_or_else(|e| e.into_inner());
     let v = g.get_or_insert_with(|| {
-        std::fs::read(file())
-            .ok()
-            .and_then(|b| serde_json::from_slice(&b).ok())
-            .unwrap_or_else(|| json!({"liked": [], "playlists": []}))
+        let bytes = std::fs::read(file()).ok();
+        let parsed: Option<Value> = bytes.as_ref().and_then(|b| serde_json::from_slice(b).ok());
+        if bytes.is_some() && parsed.is_none() {
+            // unreadable: keep a copy instead of overwriting it with an empty library on the next save
+            let _ = std::fs::copy(file(), file().with_extension("bad"));
+        }
+        parsed.filter(|v| v.is_object()).unwrap_or_else(|| json!({"liked": [], "playlists": []}))
     });
+    for k in ["liked", "playlists"] {
+        if !v[k].is_array() {
+            v[k] = json!([]);
+        }
+    }
     let r = f(v);
     let tmp = file().with_extension("tmp");
     if std::fs::write(&tmp, serde_json::to_vec(v).unwrap_or_default()).is_ok() {

@@ -45,7 +45,7 @@ pub fn radio(vid: &str) -> Result<Value, String> {
     if items.is_empty() {
         return Err("No radio for this song".into());
     }
-    Ok(Value::Array(items))
+    Ok(Value::Array(crate::mixes::spread(items, 3, 4)))
 }
 
 fn collect_panel(v: &Value, out: &mut Vec<Value>) {
