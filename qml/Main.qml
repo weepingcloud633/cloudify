@@ -739,6 +739,7 @@ ApplicationWindow {
     readonly property bool popupOpen: songMenu.opened || sleepMenu.opened || addMenu.opened || playlistEditor.opened || dupPopup.opened || deletePopup.opened || plMenu.opened || importPopup.opened || (imm.item !== null && imm.item.popupOpen === true)
     readonly property bool typing: win.activeFocusItem !== null && win.activeFocusItem.hasOwnProperty("inputMethodHints")
     Shortcut { sequence: "Escape"; enabled: (win.immersive || win.nativeFull) && !win.popupOpen; onActivated: { if (win.nativeFull) win.setFull(false); else win.immersive = false } }
+    Shortcut { sequence: "Ctrl+K"; enabled: !win.gate && !win.popupOpen; onActivated: { if (win.immersive) win.immersive = false; win.page = "search"; searchView.focusSearch() } }
     Shortcut { sequence: "F11"; onActivated: win.toggleFull() }
     Shortcut { sequence: "Left"; enabled: win.immersive && !win.typing && !win.popupOpen; onActivated: win.seek(Math.max(0, win.position - 10000)) }
     Shortcut { sequence: "Right"; enabled: win.immersive && !win.typing && !win.popupOpen; onActivated: win.seek(win.position + 10000) }

@@ -55,28 +55,66 @@ fn from_record(r: &Value) -> Option<Value> {
     Some(json!({"synced": false, "lines": lines}))
 }
 
+/// "Song (feat. X) - Remastered 2011 [Official Video]" -> "Song"
+fn clean_title(t: &str) -> String {
+    let mut s = t.to_string();
+    for (open, close) in [('(', ')'), ('[', ']')] {
+        while let (Some(a), Some(b)) = (s.find(open), s.find(close)) {
+            if b < a {
+                break;
+            }
+            s.replace_range(a..=b, "");
+        }
+    }
+    for sep in [" - ", " – ", " feat.", " ft.", " featuring "] {
+        if let Some(i) = s.find(sep) {
+            s.truncate(i);
+        }
+    }
+    s.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// The best search hit: synced beats plain, and the length should be close to the song's.
+fn best_hit(list: &[Value], dur: u64) -> Option<Value> {
+    let mut best: Option<(i64, &Value)> = None;
+    for r in list {
+        let d = r["duration"].as_f64().unwrap_or(0.0) as i64;
+        let off = if dur == 0 || d == 0 { 0 } else { (d - dur as i64).abs() };
+        let score = (if r["syncedLyrics"].as_str().is_some_and(|s| !s.trim().is_empty()) { 0 } else { 100 }) + off;
+        if best.map_or(true, |b| score < b.0) {
+            best = Some((score, r));
+        }
+    }
+    best.filter(|b| b.0 < 120).and_then(|b| from_record(b.1))
+}
+
 pub fn fetch(vid: &str, title: &str, artist: &str, album: &str, dur: u64) -> Value {
     let cache = paths::dir("cache/lyrics").join(format!("{vid}.json"));
     if let Some(v) = std::fs::read(&cache).ok().and_then(|b| serde_json::from_slice::<Value>(&b).ok()) {
         return v;
     }
-    let exact = format!(
-        "https://lrclib.net/api/get?track_name={}&artist_name={}&album_name={}&duration={}",
-        enc(title), enc(artist.split([',', '&']).next().unwrap_or(artist).trim()), enc(album), dur
-    );
-    let mut found = get(&exact).and_then(|r| from_record(&r));
-    if found.is_none() {
-        let q = format!("https://lrclib.net/api/search?track_name={}&artist_name={}", enc(title), enc(artist.split([',', '&']).next().unwrap_or(artist).trim()));
+    let who = artist.split([',', '&']).next().unwrap_or(artist).trim().to_string();
+    let clean = clean_title(title);
+    let exact = |name: &str| format!("https://lrclib.net/api/get?track_name={}&artist_name={}&album_name={}&duration={}", enc(name), enc(&who), enc(album), dur);
+    let mut found = get(&exact(title)).and_then(|r| from_record(&r));
+    if found.is_none() && clean != title && !clean.is_empty() {
+        found = get(&exact(&clean)).and_then(|r| from_record(&r));
+    }
+    // searches, widest last; a synced hit anywhere beats plain text
+    let name = if clean.is_empty() { title.to_string() } else { clean };
+    for q in [
+        format!("https://lrclib.net/api/search?track_name={}&artist_name={}", enc(&name), enc(&who)),
+        format!("https://lrclib.net/api/search?q={}", enc(&format!("{who} {name}"))),
+    ] {
+        if found.as_ref().is_some_and(|f| f["synced"] == true) {
+            break;
+        }
         if let Some(Value::Array(list)) = get(&q) {
-            let mut best: Option<(i64, &Value)> = None;
-            for r in &list {
-                let d = r["duration"].as_f64().unwrap_or(0.0) as i64;
-                let score = (if r["syncedLyrics"].is_string() { 0 } else { 100 }) + (d - dur as i64).abs();
-                if best.map_or(true, |b| score < b.0) {
-                    best = Some((score, r));
+            if let Some(hit) = best_hit(&list, dur) {
+                if found.is_none() || hit["synced"] == true {
+                    found = Some(hit);
                 }
             }
-            found = best.filter(|b| b.0 < 120).and_then(|b| from_record(b.1));
         }
     }
     match found {
@@ -91,6 +129,13 @@ pub fn fetch(vid: &str, title: &str, artist: &str, album: &str, dur: u64) -> Val
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn titles_lose_decorations() {
+        assert_eq!(clean_title("Get Lucky (feat. Pharrell) [Official Video]"), "Get Lucky");
+        assert_eq!(clean_title("Song - Remastered 2011"), "Song");
+        assert_eq!(clean_title("Plain"), "Plain");
+    }
 
     #[test]
     fn lrc_parsing() {
